@@ -96,7 +96,7 @@ async function handleSubmit() {
             password: password.value,
             role: role.value,
         });
-        router.push('/home');
+        await router.push('/home');
     } catch (_) {
         error.value = '登录失败，请检查用户名或密码';
     } finally {
