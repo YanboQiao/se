@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/es6-promise": "^0.0.33",
     "axios": "^1.8.4",
     "pinia": "^3.0.2",
     "vue": "^3.5.13",

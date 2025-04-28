@@ -1,15 +1,21 @@
 {
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "types": ["vite/client"],
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["src/*"]                /* 为 @ 添加路径映射 */
-    }
-  },
-  "include": [
-    "env.d.ts",
-    "src/**/*",
-    "src/**/*.vue"
-  ]
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "target": "es2023",
+        "lib": ["dom", "es2023"],
+        "types": [
+            "vite/client"
+        ],
+        "baseUrl": ".",
+        "paths": {
+            "@/*": [
+                "src/*"
+            ]
+        }
+    },
+    "include": [
+        "env.d.ts",
+        "src/**/*",
+        "src/**/*.vue"
+    ]
 }

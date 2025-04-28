@@ -1,12 +1,26 @@
 {
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {"@/*": ["src/*"]
-    }
-  },
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+    "compilerOptions": {
+        "target": "es2023",
+        "module": "esnext",
+        "lib": [
+            "dom",
+            "es2023",
+            "es2015"
+        ],
+        "moduleResolution": "bundler",
+        "types": [
+            "vite/client"
+        ],
+        "baseUrl": ".",
+        "paths": {
+            "@/*": [
+                "src/*"
+            ]
+        }
+    },
+    "include": [
+        "env.d.ts",
+        "src/**/*",
+        "src/**/*.vue"
+    ]
 }
