@@ -130,7 +130,101 @@
 | `uploadedAt` | `string` | 上传时间（ISO-8601）。 |
 | `expireAt` | `string` | 下载链接过期时间（若返回）。 |
 
+
 ---
+
+## 4. 教师获取自己开设的课程清单（Teacher Get Course List）
+
+| 项目 | 说明 |
+| ---- | ---- |
+| **接口名称** | `TeacherGetCourseList` |
+| **请求方法** | `GET` |
+| **URL** | `/api/v1/teacher/courses` |
+
+### 4.1 请求参数
+
+| 参数 | 类型 | 必填 | 位置 | 说明 |
+|------|------|------|------|------|
+| `teacherId` | `string` | 是 | query | 教师 **本人** ID（可由后端依据 Token 冗余校验） |
+| `semester` | `string` | 否 | query | 学期标识，如 `2025-spring`；为空返回全部 |
+| `pageSize` | `number` | 否 | query | 每页条数，默认 `20` |
+| `pageNum` | `number` | 否 | query | 页码，默认 `1` |
+
+### 4.2 成功响应体（HTTP 200）
+
+```jsonc
+{
+  "code": 0,
+  "message": "OK",
+  "data": {
+    "total": 10,
+    "pageSize": 10,
+    "pageNum": 1,
+    "courses": [
+      {
+        "courseId": "course_1234",
+        "courseName": "软件工程",
+        "courseCode": "SE2025",
+        "semester": "2025-spring",
+        "studentCount": 86,
+        "coverUrl": "https://cdn.example.com/courses/se2025.jpg"
+      }
+      // ...
+    ]
+  }
+}
+```
+
+> **权限控制**：后端需确认 `teacherId` 与登录态匹配，且用户角色为教师。  
+> **业务语义**：仅返回该教师“主讲”或“协同授课”的课程，不含助教身份课程。
+
+---
+
+## 5. 学生获取自己已选课程清单（Student Get Course List）
+
+| 项目 | 说明 |
+| ---- | ---- |
+| **接口名称** | `StudentGetCourseList` |
+| **请求方法** | `GET` |
+| **URL** | `/api/v1/student/courses` |
+
+### 5.1 请求参数
+
+| 参数 | 类型 | 必填 | 位置 | 说明 |
+|------|------|------|------|------|
+| `studentId` | `string` | 是 | query | 学生 **本人** ID（后端同样可通过 Token 校验） |
+| `semester` | `string` | 否 | query | 学期标识，如 `2025-spring`；为空返回全部 |
+| `pageSize` | `number` | 否 | query | 每页条数，默认 `20` |
+| `pageNum` | `number` | 否 | query | 页码，默认 `1` |
+
+### 5.2 成功响应体（HTTP 200）
+
+```jsonc
+{
+  "code": 0,
+  "message": "OK",
+  "data": {
+    "total": 8,
+    "pageSize": 8,
+    "pageNum": 1,
+    "courses": [
+      {
+        "courseId": "course_5678",
+        "courseName": "操作系统原理",
+        "courseCode": "OS2025",
+        "semester": "2025-spring",
+        "teacherName": "张三",
+        "coverUrl": "https://cdn.example.com/courses/os2025.jpg",
+        "progress": 0.45   // 已完成进度，可选
+      }
+      // ...
+    ]
+  }
+}
+```
+
+> **权限控制**：后端需验证 `studentId` 与登录态匹配且角色为学生。  
+> **业务语义**：只返回学生已成功选课且未退选的课程；可选字段 `progress` 显示学习进度百分比。
 
 #### 备注
 
