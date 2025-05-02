@@ -1,69 +1,80 @@
 <template>
-    <div class="flex min-h-screen items-center justify-center bg-gray-100">
-        <div class="w-full max-w-md rounded-xl bg-white p-8 shadow-2xl">
-            <h1 class="mb-6 text-center text-2xl font-bold">SE 助手登录</h1>
+    <!-- 背景：温和渐变 + 中心光斑 -->
+    <div
+        class="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-400/40 via-sky-300/40 to-teal-300/40">
+        <!-- 毛玻璃卡片 -->
+        <div
+            class="backdrop-blur-lg/50 w-full max-w-lg rounded-3xl bg-white/70 p-10 shadow-2xl ring-1 ring-white/60"
+        >
+            <h1 class="mb-8 text-center text-3xl font-extrabold tracking-wide text-gray-800">
+                SE&nbsp;助手登录
+            </h1>
 
-            <!-- 角色选择 -->
-            <div class="mb-6 flex justify-center space-x-4">
+            <!-- 角色 Tabs -->
+            <div class="mb-8 flex justify-center gap-4">
                 <button
                     type="button"
-                    :class="role === 'student' ? activeClass : inactiveClass"
+                    :class="role === 'student' ? activeTab : inactiveTab"
                     @click="role = 'student'"
-                >学生登录
+                >
+                    学生登录
                 </button>
                 <button
                     type="button"
-                    :class="role === 'teacher' ? activeClass : inactiveClass"
+                    :class="role === 'teacher' ? activeTab : inactiveTab"
                     @click="role = 'teacher'"
-                >教师登录
+                >
+                    教师登录
                 </button>
             </div>
 
-            <form @submit.prevent="handleSubmit">
-                <!-- 用户名 -->
-                <div class="mb-4">
-                    <label for="username" class="mb-2 block text-sm font-medium">用户名</label>
+            <!-- 登录表单 -->
+            <form @submit.prevent="handleSubmit" class="space-y-6">
+                <div>
+                    <label for="username" class="mb-1 block text-sm font-medium text-gray-700"
+                    >用户名</label
+                    >
                     <input
                         id="username"
                         v-model="username"
                         type="text"
-                        class="w-full rounded-lg border p-2"
+                        class="focus-visible:outline-none w-full rounded-md border border-gray-300 px-4 py-2 shadow-sm focus:ring-2 focus:ring-indigo-400"
                         required
                     />
                 </div>
 
-                <!-- 密码 -->
-                <div class="mb-6">
-                    <label for="password" class="mb-2 block text-sm font-medium">密码</label>
+                <div>
+                    <label for="password" class="mb-1 block text-sm font-medium text-gray-700"
+                    >密码</label
+                    >
                     <input
                         id="password"
                         v-model="password"
                         type="password"
-                        class="w-full rounded-lg border p-2"
+                        class="focus-visible:outline-none w-full rounded-md border border-gray-300 px-4 py-2 shadow-sm focus:ring-2 focus:ring-indigo-400"
                         required
                     />
                 </div>
 
-                <!-- 登录按钮 -->
                 <button
                     type="submit"
-                    class="w-full rounded-lg bg-blue-600 py-2 font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-60"
+                    class="inline-flex w-full items-center justify-center rounded-md bg-indigo-600 py-2 font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
                     :disabled="loading"
                 >
                     {{ loading ? '登录中…' : '登录' }}
                 </button>
             </form>
 
-            <!-- 忘记密码链接 -->
-            <router-link
-                to="/reset-password"
-                class="mt-4 block text-center text-sm text-blue-600 hover:underline"
-            >
-                忘记密码？
-            </router-link>
-
-            <!-- 错误信息 -->
-            <p v-if="error" class="mt-4 text-sm text-red-600">{{ error }}</p>
+            <!-- 底部链接 / 提示 -->
+            <div class="mt-6 text-center">
+                <router-link
+                    to="/reset-password"
+                    class="text-sm text-indigo-700 hover:underline"
+                >忘记密码？
+                </router-link
+                >
+                <p v-if="error" class="mt-4 text-sm text-red-600">{{ error }}</p>
+            </div>
         </div>
     </div>
 </template>
@@ -82,10 +93,11 @@ const role = ref<'student' | 'teacher'>('student');
 const error = ref('');
 const loading = ref(false);
 
-const activeClass =
-    'rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white shadow hover:bg-blue-700';
-const inactiveClass =
-    'rounded-lg bg-gray-200 px-4 py-2 font-semibold text-gray-600 hover:bg-gray-300';
+/* Tailwind class 变量 */
+const activeTab =
+    'rounded-full bg-indigo-600 px-6 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-700';
+const inactiveTab =
+    'rounded-full bg-white/40 px-6 py-2 text-sm font-semibold text-indigo-600 hover:bg-white/70';
 
 async function handleSubmit() {
     error.value = '';
@@ -96,7 +108,10 @@ async function handleSubmit() {
             password: password.value,
             role: role.value,
         });
-        await router.push('/home');
+
+        /* 根据角色跳转 */
+        const target = role.value === 'student' ? '/student/home' : '/teacher/home';
+        await router.push(target);
     } catch (_) {
         error.value = '登录失败，请检查用户名或密码';
     } finally {
