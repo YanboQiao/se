@@ -50,7 +50,6 @@ wheels/
 # Python虚拟环境
 venv/
 ENV/
-env/
 .env
 .venv
 env.bak/
