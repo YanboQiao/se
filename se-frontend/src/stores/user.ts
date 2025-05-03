@@ -2,13 +2,26 @@ import {defineStore} from 'pinia';
 import axios from 'axios';
 
 interface LoginPayload {
-    username: string;
+    useremail: string;
     password: string;
     role: 'student' | 'teacher';
 }
 
-interface ResetPayload {
-    username: string;
+interface RegisterPayload {
+    useremail: string;
+    password: string;
+    role: 'student' | 'teacher';
+}
+
+interface ResetPayloadByOldPassword {
+    useremail: string;
+    oldPassword: string;
+    newPassword: string;
+}
+
+interface ResetPayloadByEmail {
+    useremail: string;
+    emailCode: string;
     newPassword: string;
 }
 
@@ -31,23 +44,32 @@ export const useUserStore = defineStore('user', {
 
     actions: {
         /** 登录（教师 / 学生） */
-        async login({username, password, role}: LoginPayload) {
+        async login({useremail, password, role}: LoginPayload) {
             // 👉 请替换为真实后端接口
-            const {data} = await axios.post('/api/login', {username, password, role});
+            const {data} = await axios.post('/api/login', {useremail, password, role});
 
             this.token = data.token;
-            this.username = username;
+            this.useremail = useremail;
             this.role = role;
 
-            localStorage.setItem('token', this.token!);
             localStorage.setItem('username', this.username!);
             localStorage.setItem('role', this.role);
         },
 
         /** 重置密码 */
-        async resetPassword({username, newPassword}: ResetPayload) {
-            // 👉 请替换为真实后端接口
-            await axios.post('/api/reset-password', {username, newPassword});
+        async register(payload: RegisterPayload) {
+            await axios.post('/api/register', payload);
+            // 注册成功后可直接调用 login() 或跳转到登录页
+        },
+
+        /* ===== 旧密码修改 ===== */
+        async resetPasswordByOld(payload: ResetPayloadByOldPassword) {
+            await axios.post('/api/reset-password/old', payload);
+        },
+
+        /* ===== 邮箱验证码修改 ===== */
+        async resetPasswordByEmail(payload: ResetPayloadByEmail) {
+            await axios.post('/api/reset-password/email', payload);
         },
 
         /** 退出登录 */
