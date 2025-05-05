@@ -21,7 +21,7 @@ export default defineConfig(({mode}) => {
             port: 5173,                 // 前端端口，可自行调整
             proxy: {
                 '/api': {
-                    target: env.VITE_API_TARGET || 'http://localhost:5000', // ← 后端地址
+                    target: env.VITE_API_TARGET || 'http://localhost:1010', // ← 后端地址
                     changeOrigin: true,
                     rewrite: (path) => path.replace(/^\/api/, ''),          // 去掉 /api
                 },
