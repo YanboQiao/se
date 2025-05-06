@@ -3,12 +3,13 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import secrets
 import time
+from db import register_user
 
 DB_CONFIG = {
     'host': '127.0.0.1',
     'port': 3306,
     'user': 'root',
-    'password': 'BITZZCnmsl2201?',
+    'password': '12345678',
     'database': 'se_db',
     'charset': 'utf8mb4',
     'cursorclass': pymysql.cursors.DictCursor
@@ -71,6 +72,21 @@ def login():
     else:
         return jsonify({"status": "error", "message": message}), 401
 
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    print(data)  #打印请求数据
+    useremail = data.get('useremail')
+    username = data.get('username')
+    password = data.get('password')
+    role = data.get('role')
+    if not all([useremail, username, password, role]):
+        return jsonify({"status": "error", "message": "请填写完整信息"}), 400
+    success, message = register_user(useremail, username, password, role)
+    if success:
+        return jsonify({"status": "success", "message": message}), 200
+    else:
+        return jsonify({"status": "error", "message": message}), 400
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=1010)

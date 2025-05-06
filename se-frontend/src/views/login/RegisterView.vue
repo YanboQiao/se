@@ -22,6 +22,21 @@
                         <label for="useremail" class="block text-sm font-medium text-gray-700 mb-2">邮箱 / Email</label>
                         <input id="useremail" v-model="useremail" type="email" class="form-input" required />
                     </div>
+                    <!-- 新增身份选择 -->
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700 mb-2">注册身份</label>
+                      <div class="flex gap-4">
+                        <label>
+                          <input type="radio" v-model="role" value="student" />
+                          学生
+                        </label>
+                        <label>
+                          <input type="radio" v-model="role" value="teacher" />
+                          教师
+                        </label>
+                      </div>
+                    </div>
+                    
                     <div>
                         <label for="password" class="block text-sm font-medium text-gray-700 mb-2">密码</label>
                         <input id="password" v-model="password" type="password" class="form-input" required />
@@ -53,6 +68,7 @@ const router = useRouter();
 const username = ref('');
 const useremail = ref('');
 const password = ref('');
+const role = ref<'student' | 'teacher'>('student'); // 默认学生
 const loading = ref(false);
 const error = ref('');
 const success = ref('');
@@ -66,6 +82,7 @@ async function handleRegister() {
             username: username.value,
             useremail: useremail.value,
             password: password.value,
+            role: role.value, //新增身份选择
         });
         success.value = '注册成功，正在跳转到登录…';
         setTimeout(() => router.push('/login'), 1500);
