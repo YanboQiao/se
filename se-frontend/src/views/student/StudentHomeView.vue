@@ -1,6 +1,81 @@
-<!-- src/views/StudentHomeView.vue -->
 <template>
-    <div class="flex h-screen items-center justify-center text-3xl font-bold text-indigo-700">
-        🎓 欢迎来到学生主页
+    <div class="min-h-screen flex flex-col bg-main-gradient">
+        <!-- 顶部栏 -->
+        <header class="p-6 lg:p-8 bg-white/30 backdrop-blur-sm shadow">
+            <h1 class="text-xl lg:text-2xl font-bold text-gray-800">
+                {{ greeting }}
+            </h1>
+        </header>
+
+        <!-- 主体 -->
+        <main class="flex-1 p-4 lg:p-8 grid lg:grid-cols-[260px_1fr_260px] gap-6">
+            <!-- 待办任务 -->
+            <section class="bg-glass p-6 overflow-y-auto">
+                <h2 class="text-lg font-semibold text-indigo-700 mb-4">待办任务</h2>
+                <ul class="space-y-3">
+                    <li v-for="todo in todos" :key="todo.id" class="text-sm text-gray-800">
+                        • {{ todo.title }}
+                    </li>
+                    <li v-if="!todos.length" class="text-gray-500 text-sm">暂无任务</li>
+                </ul>
+            </section>
+
+            <!-- 课程列表 -->
+            <section class="bg-glass p-6 overflow-y-auto">
+                <h2 class="text-lg font-semibold text-indigo-700 mb-4">我的课程</h2>
+                <ul class="space-y-3">
+                    <li v-for="course in courses" :key="course.id">
+                        <router-link
+                            :to="`/course/${course.id}`"
+                            class="link hover:font-medium"
+                        >
+                            {{ course.name }}
+                        </router-link>
+                    </li>
+                    <li v-if="!courses.length" class="text-gray-500 text-sm">暂无课程</li>
+                </ul>
+            </section>
+
+            <!-- 消息 -->
+            <section class="bg-glass p-6 overflow-y-auto">
+                <h2 class="text-lg font-semibold text-indigo-700 mb-4">老师评语</h2>
+                <ul class="space-y-3">
+                    <li v-for="msg in messages" :key="msg.id" class="text-sm text-gray-800">
+                        {{ msg.content }}
+                    </li>
+                    <li v-if="!messages.length" class="text-gray-500 text-sm">暂无消息</li>
+                </ul>
+            </section>
+        </main>
     </div>
 </template>
+
+<script setup lang="ts">
+import { onMounted, ref, computed } from 'vue';
+import axios from 'axios';
+import { useUserStore } from '@/stores/user';
+
+/* ---------- 状态 ---------- */
+const store      = useUserStore();
+const display    = computed(() => store.username || store.useremail || '同学');
+const greeting   = computed(() => `${display.value}同学，欢迎回来！`);
+
+interface Course   { id: string; name: string }
+interface Todo     { id: string; title: string }
+interface Message  { id: string; content: string }
+
+const courses   = ref<Course[]>([]);
+const todos     = ref<Todo[]>([]);
+const messages  = ref<Message[]>([]);
+
+/* ---------- 数据拉取 ---------- */
+async function fetchStudentData() {
+    // TODO: 替换为真实后端接口
+    const { data } = await axios.get('/api/student/dashboard');
+    courses.value  = data.courses   || [];
+    todos.value    = data.todos     || [];
+    messages.value = data.messages  || [];
+}
+
+onMounted(fetchStudentData);
+</script>
