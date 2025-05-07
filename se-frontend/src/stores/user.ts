@@ -44,6 +44,7 @@ export const useUserStore = defineStore('user', {
 
     actions: {
         /** 登录（教师 / 学生） */
+<<<<<<< HEAD
         async login({useremail, password, role}: LoginPayload) {
             const {data} = await axios.post('/api/login', {useremail, password, role});
             if (data.status !== 'success') {
@@ -57,6 +58,29 @@ export const useUserStore = defineStore('user', {
             localStorage.setItem('token', this.token!);
             localStorage.setItem('username', this.username!);
             localStorage.setItem('role', this.role!);
+=======
+        async login({ useremail, password, role }: LoginPayload) {
+            // 与后端约定只要 HTTP 2xx 就算请求成功
+            const response  = await axios.post('/api/login', { useremail, password, role });
+            const { status, message, data } = response.data;
+
+            // ❶ 按后端的 status 判断
+            if (status !== 'success') {
+                throw new Error(message || '登录失败');
+            }
+
+            // ❷ 正确写入 state
+            this.token     = data.token;
+            this.username  = data.username;
+            this.role      = data.role;
+            this.useremail = useremail;           // state 里加一个 useremail 字段
+
+            // ❸ 本地持久化
+            localStorage.setItem('token',     this.token!);
+            localStorage.setItem('username',  this.username!);
+            localStorage.setItem('role',      this.role!);
+            localStorage.setItem('useremail', this.useremail!);
+>>>>>>> main
         },
 
         /** 重置密码 */
