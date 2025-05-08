@@ -21,7 +21,7 @@ interface ResetPayloadByOldPassword {
 
 interface ResetPayloadByEmail {
     useremail: string;
-    emailCode: string;
+    verifyCode: string;
     newPassword: string;
 }
 
