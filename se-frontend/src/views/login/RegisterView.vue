@@ -20,9 +20,21 @@
                     </div>
                     <div>
                         <label for="useremail" class="block text-sm font-medium text-gray-700 mb-2">邮箱 / Email</label>
-                        <input id="useremail" v-model="useremail" type="email" class="form-input" required />
+                        <input 
+                            id="useremail" 
+                            v-model="useremail" 
+                            type="email" 
+                            class="form-input" 
+                            placeholder=""
+                            @blur="validateEmailFormat" 
+                            required 
+                        />
+                        <p class="mt-1 text-xs text-gray-500">
+                            支持的邮箱: qq.com, 163.com, gmail.com, outlook.com, 126.com, foxmail.com
+                        </p>
+                        <p v-if="emailError" class="mt-1 text-xs text-red-600">{{ emailError }}</p>
                     </div>
-                    <!-- 新增身份选择 -->
+                    <!-- 身份选择 -->
                     <div>
                       <label class="block text-sm font-medium text-gray-700 mb-2">注册身份</label>
                       <div class="flex gap-4">
@@ -41,7 +53,7 @@
                         <label for="password" class="block text-sm font-medium text-gray-700 mb-2">密码</label>
                         <input id="password" v-model="password" type="password" class="form-input" required />
                     </div>
-                    <button type="submit" :disabled="loading" class="btn-primary w-full">
+                    <button type="submit" :disabled="loading || !!emailError" class="btn-primary w-full">
                         {{ loading ? '注册中…' : '注册' }}
                     </button>
                 </form>
@@ -67,27 +79,60 @@ const router = useRouter();
 
 const username = ref('');
 const useremail = ref('');
+const emailError = ref('');
 const password = ref('');
 const role = ref<'student' | 'teacher'>('student'); // 默认学生
 const loading = ref(false);
 const error = ref('');
 const success = ref('');
 
+// 邮箱验证函数
+function validateEmailFormat() {
+    emailError.value = '';
+    
+    if (!useremail.value) return;
+    
+    const validDomains = ['qq.com', '163.com', 'gmail.com', 'outlook.com', '126.com', 'foxmail.com'];
+    const emailRegex = /^[^\s@]+@([^\s@]+)\.[^\s@]+$/;
+    
+    if (!emailRegex.test(useremail.value)) {
+        emailError.value = '请输入有效的邮箱地址';
+        return;
+    }
+    
+    const domain = useremail.value.split('@')[1];
+    if (!validDomains.includes(domain)) {
+        emailError.value = '目前只支持：' + validDomains.join(', ');
+        return;
+    }
+}
+
 async function handleRegister() {
     error.value = '';
     success.value = '';
+    
+    // 再次验证邮箱
+    validateEmailFormat();
+    if (emailError.value) {
+        return;
+    }
+    
     loading.value = true;
     try {
         await axios.post('/api/register', {
             username: username.value,
             useremail: useremail.value,
             password: password.value,
-            role: role.value, //新增身份选择
+            role: role.value,
         });
         success.value = '注册成功，正在跳转到登录…';
         setTimeout(() => router.push('/login'), 1500);
-    } catch {
-        error.value = '注册失败，请检查信息后重试';
+    } catch (err) {
+        if (axios.isAxiosError(err) && err.response) {
+            error.value = err.response.data?.message || '注册失败，请检查信息后重试';
+        } else {
+            error.value = '注册失败，请检查信息后重试';
+        }
     } finally {
         loading.value = false;
     }

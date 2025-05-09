@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosRequestHeaders } from 'axios';
 import {useUserStore} from '@/stores/user';
 
 /**
@@ -17,7 +17,7 @@ const http = axios.create({
 http.interceptors.request.use((config) => {
     const store = useUserStore();
     if (store.token) {
-        config.headers = config.headers || {} as axios.AxiosRequestHeaders;
+        config.headers = config.headers || {} as AxiosRequestHeaders;
         config.headers.Authorization = `Bearer ${store.token}`;
     }
     return config;

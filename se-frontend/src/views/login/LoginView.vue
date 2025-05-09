@@ -103,3 +103,33 @@ async function handleSubmit() {
     }
 }
 </script>
+
+<style scoped>
+/* ===== 背景渐变流动 ===== */
+@keyframes gradientShift {
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+.bg-gradient-to-br {
+    background-size: 400% 400%;
+    animation: gradientShift 20s ease infinite;
+}
+
+/* ===== 毛玻璃 & 阴影 ===== */
+.backdrop-blur-lg\/50 {
+    backdrop-filter: blur(24px) saturate(180%);
+}
+.shadow-card {
+    box-shadow:
+        0 28px 40px -10px rgba(0,0,0,0.18),
+        0 12px 18px -10px rgba(0,0,0,0.05);
+}
+
+/* ===== 按钮交互 ===== */
+button[disabled] { cursor: not-allowed; }
+button:active:not([disabled]) {
+    transform: translateY(2px);
+    transition: transform .1s;
+}
+</style>

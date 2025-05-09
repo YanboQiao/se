@@ -20,9 +20,10 @@ interface ResetPayloadByOldPassword {
 }
 
 interface ResetPayloadByEmail {
-    useremail: string;
-    emailCode: string;
+    email: string;
+    verifyCode: string;
     newPassword: string;
+    role: 'student' | 'teacher';  // 添加角色字段
 }
 
 interface UserState {
@@ -79,8 +80,14 @@ export const useUserStore = defineStore('user', {
         },
 
         /* ===== 邮箱验证码修改 ===== */
-        async resetPasswordByEmail(payload: ResetPayloadByEmail) {
-            await axios.post('/api/reset-password/email', payload);
+        async resetPasswordByEmail({email, verifyCode, newPassword, role}: ResetPayloadByEmail) {
+            const {data} = await axios.post('/api/reset-password', {
+                email,
+                verifyCode,
+                newPassword,
+                role
+            });
+            return data;
         },
 
         /** 退出登录 */
