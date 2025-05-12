@@ -1,70 +1,102 @@
-import pymysql
+"""
+db.py   —— 数据库相关工具
+依赖：PyMySQL ≥ 1.1.0
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
 import secrets
 import time
 
-DB_CONFIG = {
-    'host': '127.0.0.1',
-    'port': 3306,
-    'user': 'root',
-    'password': '12345678',  
-    'database': 'se_db',
-    'charset': 'utf8mb4',
-    'cursorclass': pymysql.cursors.DictCursor
-}
+import pymysql
 
-TOKEN_EXPIRE_SECONDS = 3600  # token有效期1小时
+# ----------------------------------------------------------------------
+# 常量
+# ----------------------------------------------------------------------
+TOKEN_EXPIRE_SECONDS: int = 3600           # token 有效 1 小时
+_CFG_PATH = pathlib.Path(__file__).with_name("db_config.json")
 
-def get_db_connection():
-    """获取数据库连接"""
+# ----------------------------------------------------------------------
+# 读取数据库配置
+# ----------------------------------------------------------------------
+with _CFG_PATH.open(encoding="utf-8") as fp:
+    _cfg: dict[str, object] = json.load(fp)
+_cfg["cursorclass"] = pymysql.cursors.DictCursor
+DB_CONFIG: dict[str, object] = _cfg                  # 供外部查看
+
+# ----------------------------------------------------------------------
+# 连接函数
+# ----------------------------------------------------------------------
+def get_db_connection() -> pymysql.connections.Connection:
+    """创建并返回数据库连接"""
     return pymysql.connect(**DB_CONFIG)
 
-def register_user(useremail, username, password, role):
-    """注册新用户，role为'student'或'teacher'"""
-    table = 'student' if role == 'student' else 'teacher'
+# ----------------------------------------------------------------------
+# 业务函数
+# ----------------------------------------------------------------------
+def register_user(
+    useremail: str,
+    username: str,
+    password: str,
+    role: str,
+) -> tuple[bool, str]:
+    """注册新用户"""
+    table = "student" if role == "student" else "teacher"
     conn = get_db_connection()
     try:
-        with conn.cursor() as cursor:
-            # 检查邮箱是否已存在
-            sql_check = f"SELECT * FROM {table} WHERE useremail=%s"
-            cursor.execute(sql_check, (useremail,))
-            if cursor.fetchone():
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT 1 FROM {table} WHERE useremail=%s", (useremail,))
+            if cur.fetchone():
                 return False, "该邮箱已被注册"
-            # 插入新用户
-            sql_insert = f"INSERT INTO {table} (useremail, username, password) VALUES (%s, %s, %s)"
-            cursor.execute(sql_insert, (useremail, username, password))
+            cur.execute(
+                f"INSERT INTO {table} (useremail, username, password)"
+                f" VALUES (%s, %s, %s)",
+                (useremail, username, password),
+            )
         conn.commit()
         return True, "注册成功"
-    except Exception as e:
-        return False, f"注册失败: {str(e)}"
+    except Exception as exc:
+        return False, f"注册失败: {exc}"
     finally:
         conn.close()
 
-def login_user(useremail, password, role):
-    """用户登录，支持学生和教师，登录成功生成token"""
-    table = 'student' if role == 'student' else 'teacher'
+
+def login_user(
+    useremail: str,
+    password: str,
+    role: str,
+) -> tuple[bool, str, dict | None]:
+    """登录并生成 token"""
+    table = "student" if role == "student" else "teacher"
     conn = get_db_connection()
     try:
-        with conn.cursor() as cursor:
-            sql = f"SELECT * FROM {table} WHERE useremail=%s"
-            cursor.execute(sql, (useremail,))
-            user = cursor.fetchone()
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT * FROM {table} WHERE useremail=%s", (useremail,))
+            user = cur.fetchone()
             if not user:
                 return False, "用户不存在", None
-            if user['password'] != password:
+            if user["password"] != password:
                 return False, "密码错误", None
-            # 生成token和过期时间
             token = secrets.token_hex(16)
             expire_at = int(time.time()) + TOKEN_EXPIRE_SECONDS
-            update_sql = f"UPDATE {table} SET token=%s WHERE useremail=%s"
-            cursor.execute(update_sql, (token, useremail))
-            conn.commit()
-            return True, "登录成功", {
+            cur.execute(
+                f"UPDATE {table} SET token=%s WHERE useremail=%s",
+                (token, useremail),
+            )
+        conn.commit()
+        return (
+            True,
+            "登录成功",
+            {
                 "token": token,
                 "expire_at": expire_at,
                 "username": user["username"],
-                "role": role
-            }
-    except Exception as e:
-        return False, f"登录失败: {str(e)}", None
+                "role": role,
+            },
+        )
+    except Exception as exc:
+        return False, f"登录失败: {exc}", None
     finally:
         conn.close()
