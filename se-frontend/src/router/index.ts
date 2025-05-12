@@ -42,6 +42,18 @@ const routes: Array<RouteRecordRaw> = [
         component: () => import('@/views/login/RegisterView.vue'),
         meta: { requiresAuth: false },
     },
+    {
+    path: '/llm',
+    component: () => import('@/views/llm/index.vue'),
+},
+{
+    path: '/llm/chat/:id',
+    component: () => import('@/views/llm/chat/ChatPage.vue'),        // 待实现
+},
+{
+    path: '/llm/agent/:id',
+    component: () => import('@/views/llm/agent/AgentPage.vue'),      // 待实现
+},
 ];
 
 /* 实例化 */
