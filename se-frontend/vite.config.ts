@@ -22,8 +22,7 @@ export default defineConfig(({mode}) => {
             proxy: {
                 '/api': {
                     target: env.VITE_API_TARGET || 'http://localhost:1010', // ← 后端地址
-                    changeOrigin: true,
-                    rewrite: (path) => path.replace(/^\/api/, ''),          // 去掉 /api
+                    changeOrigin: true
                 },
             },
         },

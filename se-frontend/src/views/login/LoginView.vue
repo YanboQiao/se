@@ -90,10 +90,10 @@ const inactiveTab =
     'tab-inactive';
 
 async function handleSubmit() {
-    error.value   = '';
+    error.value = '';
     loading.value = true;
     try {
-        await store.login({ useremail: useremail.value, password: password.value, role: role.value });
+        await store.login({useremail: useremail.value, password: password.value, role: role.value});
         const target = role.value === 'student' ? '/student/home' : '/teacher/home';
         await router.push(target);
     } catch {

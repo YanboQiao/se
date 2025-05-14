@@ -167,8 +167,8 @@ async function handleSubmit() {
 
     try {
         await store.resetPasswordByEmail({
-            useremail:   email.value,
-            emailCode:   verifyCode.value,   // 与后端字段一致
+            email:   email.value,
+            verifyCode:   verifyCode.value,   // 与后端字段一致
             newPassword: newPassword.value,
             role:        role.value,
         });
