@@ -1,39 +1,15 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useUserStore } from '@/stores/user';
 
-/* 路由表 */
-const routes: Array<RouteRecordRaw> = [
+/* ---------------- 路由表 ---------------- */
+const routes: RouteRecordRaw[] = [
     { path: '/', redirect: '/login' },
 
-    // 登录页
+    /* === 认证相关 === */
     {
         path: '/login',
         name: 'Login',
         component: () => import('@/views/login/LoginView.vue'),
-        meta: { requiresAuth: false },
-    },
-
-    // 学生主页
-    {
-        path: '/student/home',
-        name: 'StudentHome',
-        component: () => import('@/views/student/StudentHomeView.vue'),
-        meta: { requiresAuth: true, role: 'student' },
-    },
-
-    // 教师主页
-    {
-        path: '/teacher/home',
-        name: 'TeacherHome',
-        component: () => import('@/views/teacher/TeacherHomeView.vue'),
-        meta: { requiresAuth: true, role: 'teacher' },
-    },
-
-    // 重置密码
-    {
-        path: '/reset-password',
-        name: 'ResetPassword',
-        component: () => import('@/views/login/ResetPasswordView.vue'),
         meta: { requiresAuth: false },
     },
     {
@@ -43,35 +19,96 @@ const routes: Array<RouteRecordRaw> = [
         meta: { requiresAuth: false },
     },
     {
-    path: '/llm',
-    component: () => import('@/views/llm/index.vue'),
-},
-{
-    path: '/llm/chat/:id',
-    component: () => import('@/views/llm/chat/ChatPage.vue'),        // 待实现
-},
-{
-    path: '/llm/agent/:id',
-    component: () => import('@/views/llm/agent/AgentPage.vue'),      // 待实现
-},
+        path: '/reset-password',
+        name: 'ResetPassword',
+        component: () => import('@/views/login/ResetPasswordView.vue'),
+        meta: { requiresAuth: false },
+    },
+
+    /* === 学生端 === */
+    {
+        path: '/student/home',
+        name: 'StudentHome',
+        component: () => import('@/views/student/StudentHomeView.vue'),
+        meta: { requiresAuth: true, role: 'student' },
+    },
+    {
+        path: '/student/course/:id',
+        name: 'StudentCourse',
+        component: () => import('@/views/student/StudentCourseView.vue'),
+        meta: { requiresAuth: true, role: 'student' },
+    },
+    {
+        path: '/student/course/:id/assignment/:assignmentId',
+        name: 'StudentAssignment',
+        component: () => import('@/views/student/StudentAssignmentView.vue'),
+        meta: { requiresAuth: true, role: 'student' },
+    },
+
+    /* === 教师端 === */
+    {
+        path: '/teacher/home',
+        name: 'TeacherHome',
+        component: () => import('@/views/teacher/TeacherHomeView.vue'),
+        meta: { requiresAuth: true, role: 'teacher' },
+    },
+    {
+        path: '/teacher/course/:id',
+        name: 'TeacherCourse',
+        component: () => import('@/views/teacher/TeacherCourseView.vue'),
+        meta: { requiresAuth: true, role: 'teacher' },
+    },
+    {
+        path: '/teacher/course/:id/assignment/:assignmentId',
+        name: 'TeacherAssignment',
+        component: () => import('@/views/teacher/TeacherAssignmentView.vue'),
+        meta: { requiresAuth: true, role: 'teacher' },
+    },
+
+    /* === LLM 交互（公共） === */
+    {
+        path: '/llm',
+        name: 'LLMIndex',
+        component: () => import('@/views/llm/index.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/llm/chat/:id',
+        name: 'ChatPage',
+        component: () => import('@/views/llm/chat/ChatPage.vue'),
+        meta: { requiresAuth: true },
+    },
+    {
+        path: '/llm/agent/:id',
+        name: 'AgentPage',
+        component: () => import('@/views/llm/agent/AgentPage.vue'),
+        meta: { requiresAuth: true },
+    },
+
+    /* === 兜底 404 === */
+    {
+        path: '/:pathMatch(.*)*',
+        name: 'NotFound',
+        component: () => import('@/views/common/NotFound.vue'),
+    },
 ];
 
-/* 实例化 */
+/* ---------------- 实例化 ---------------- */
 const router = createRouter({
     history: createWebHistory(),
     routes,
 });
 
-/* 全局守卫 */
+/* ---------------- 全局守卫 ---------------- */
 router.beforeEach((to, _from, next) => {
     const store = useUserStore();
 
-    // 需要登录但未认证 → 重定向登录页
+    // 1. 需要登录但未认证
     if (to.meta.requiresAuth && !store.isAuthenticated) {
         return next('/login');
     }
 
-    // 已登录但角色不匹配 → 重定向各自主页
+    // 2. 角色不匹配
     if (to.meta.role && store.role && to.meta.role !== store.role) {
         return next(store.role === 'teacher' ? '/teacher/home' : '/student/home');
     }

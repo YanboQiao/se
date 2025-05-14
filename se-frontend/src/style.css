@@ -1,68 +1,73 @@
-/* ===== Tailwind 自定义类 ===== */
+/* ===============================================================
+ *  全局样式入口
+ *  1. 引入 Tailwind base / components / utilities
+ *  2. 在同一文件内声明自定义工具类与关键帧
+ * =============================================================== */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 渐变背景封装 */
-.bg-main-gradient {
-    @apply bg-gradient-to-br from-indigo-400/40 via-sky-300/40 to-teal-300/40;
-    background-size: 400% 400%;
-    animation: gradientShift 20s ease infinite;
+/* ---------------------------------------------------------------
+ *  自定义工具类（放在 utilities layer，确保能被编译保留）
+ * --------------------------------------------------------------- */
+@layer utilities {
+    /* === 渐变背景 === */
+    .bg-main-gradient {
+        @apply bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500;
+        background-size: 400% 400%;
+        animation: gradientShift 20s ease infinite;
+    }
+
+    /* === 毛玻璃卡片 ===
+     *  ⚠️ 注意：Tailwind 只给颜色类支持 “/opacity” 写法，
+     *  filter 类（backdrop-blur-…）没有 “/50” 这样的语法。
+     */
+    .bg-glass {
+        /* 50% 透明度由 bg-white/40 控制；blur & saturate 分开写 */
+        @apply backdrop-blur-lg backdrop-saturate-150 bg-white/40
+               rounded-2xl shadow-card;
+    }
+
+    /* === 输入框 === */
+    .input-control {
+        @apply w-full rounded-lg border border-gray-300 px-4 py-2
+               text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500;
+    }
+
+    /* === 主按钮 === */
+    .btn-primary {
+        @apply rounded-lg bg-indigo-600 text-white font-semibold
+               px-4 py-2 hover:bg-indigo-700 transition disabled:opacity-60;
+    }
+
+    /* === 文本/标签/选项卡 === */
+    .link  { @apply text-indigo-600 hover:underline; }
+    .label { @apply block text-sm font-medium text-gray-700 mb-2; }
+
+    .tab-active {
+        @apply rounded-full bg-indigo-600 px-6 py-2 text-sm font-semibold
+               text-white shadow hover:bg-indigo-700;
+    }
+    .tab-inactive {
+        @apply rounded-full bg-white/40 px-6 py-2 text-sm font-semibold
+               text-indigo-600 hover:bg-white/70;
+    }
 }
 
-/* 毛玻璃卡片 */
-.bg-glass {
-    @apply bg-white/70 backdrop-blur-lg rounded-3xl shadow-card ring-1 ring-white/60;
-}
-
-/* 输入框公用 */
-.input-control {
-    @apply w-full rounded-md border border-gray-300 px-5 py-3 text-base shadow-sm
-    focus:ring-2 focus:ring-indigo-500 focus:outline-none;
-}
-
-/* 主按钮 */
-.btn-primary {
-    @apply rounded-md bg-indigo-600 py-3 text-base font-semibold text-white
-    hover:bg-indigo-700 disabled:opacity-60 transition;
-}
-
-/* 标签 */
-.label {
-    @apply block text-sm font-medium text-gray-700 mb-2;
-}
-
-/* 选项卡 */
-.tab-active {
-    @apply rounded-full bg-indigo-600 px-6 py-2 text-sm font-semibold text-white shadow
-    hover:bg-indigo-700;
-}
-
-.tab-inactive {
-    @apply rounded-full bg-white/40 px-6 py-2 text-sm font-semibold text-indigo-600
-    hover:bg-white/70;
-}
-
-/* 文本链接 */
-.link {
-    @apply text-sm text-indigo-700 hover:underline;
-}
-
-/* 阴影卡片 */
+/* ---------------------------------------------------------------
+ *  自定义阴影
+ * --------------------------------------------------------------- */
 .shadow-card {
-    box-shadow: 0 28px 40px -10px rgba(0, 0, 0, 0.18),
-    0 12px 18px -10px rgba(0, 0, 0, 0.05);
+    box-shadow:
+        0 28px 40px -10px rgba(0, 0, 0, 0.18),
+        0 12px 18px -10px rgba(0, 0, 0, 0.05);
 }
 
-/* 背景渐变动画 */
+/* ---------------------------------------------------------------
+ *  渐变动画关键帧
+ * --------------------------------------------------------------- */
 @keyframes gradientShift {
-    0% {
-        background-position: 0 50%;
-    }
-    50% {
-        background-position: 100% 50%;
-    }
-    100% {
-        background-position: 0 50%;
-    }
+    0%   { background-position: 0% 50%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
