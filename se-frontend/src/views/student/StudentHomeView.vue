@@ -1,10 +1,24 @@
 <template>
     <div class="min-h-screen flex flex-col bg-main-gradient">
         <!-- 顶部栏 -->
-        <header class="p-6 lg:p-8 bg-white/30 backdrop-blur-sm shadow">
+        <header
+            class="p-6 lg:p-8 bg-white/30 backdrop-blur-sm shadow
+                   flex items-center justify-between"
+        >
             <h1 class="text-xl lg:text-2xl font-bold text-gray-800">
                 {{ greeting }}
             </h1>
+
+            <!-- AI 学习助手入口 -->
+            <a
+                href="http://localhost:8001/llms/"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="bg-indigo-600/90 text-white px-4 py-2 rounded-lg text-sm
+                       hover:bg-indigo-700 transition shadow-card"
+            >
+                学习有困难？大模型来帮忙！
+            </a>
         </header>
 
         <!-- 主体 -->
