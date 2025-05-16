@@ -1,22 +1,13 @@
 <template>
     <div class="min-h-screen flex flex-col bg-main-gradient">
         <!-- 顶部栏 -->
-        <header
-            class="p-6 lg:p-8 bg-white/30 backdrop-blur-sm shadow
-                   flex items-center justify-between"
-        >
+        <header class="p-6 lg:p-8 bg-white/30 backdrop-blur-sm shadow flex items-center justify-between">
             <h1 class="text-xl lg:text-2xl font-bold text-gray-800">
                 {{ greeting }}
             </h1>
-
             <!-- AI 学习助手入口 -->
-            <a
-                href="http://localhost:8001/llms/"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="bg-indigo-600/90 text-white px-4 py-2 rounded-lg text-sm
-                       hover:bg-indigo-700 transition shadow-card"
-            >
+            <a href="http://localhost:8001/llms/" target="_blank" rel="noopener noreferrer"
+               class="bg-indigo-600/90 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition shadow-card">
                 学习有困难？大模型来帮忙！
             </a>
         </header>
@@ -39,15 +30,34 @@
                 <h2 class="text-lg font-semibold text-indigo-700 mb-4">我的课程</h2>
                 <ul class="space-y-3">
                     <li v-for="course in courses" :key="course.id">
-                        <router-link
-                            :to="`/course/${course.id}`"
-                            class="link hover:font-medium"
-                        >
+                        <router-link :to="`/course/${course.id}`" class="link hover:font-medium">
                             {{ course.name }}
                         </router-link>
+                        <span @click="dropCourse(course.id)" class="text-red-600 text-xs cursor-pointer ml-2">[退课]</span>
                     </li>
                     <li v-if="!courses.length" class="text-gray-500 text-sm">暂无课程</li>
                 </ul>
+                <div class="mt-6 text-center">
+                    <button v-if="!showJoinForm" @click="showJoinForm = true" class="btn-primary px-6 py-2">
+                        加入新课程
+                    </button>
+                </div>
+                <div v-if="showJoinForm" class="mt-6 bg-white/80 p-6 rounded-xl shadow-inner">
+                    <h3 class="text-base font-semibold text-gray-800 mb-4">选课</h3>
+                    <form @submit.prevent="joinCourse" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2" for="courseId">课程ID</label>
+                            <input id="courseId" v-model="newCourseId" class="input-control" required placeholder="课程ID或代码" />
+                        </div>
+                        <div class="text-center">
+                            <button type="submit" class="btn-primary px-6 py-2 mr-4" :disabled="joining">提交</button>
+                            <button type="button" @click="cancelJoin" class="btn-primary bg-gray-400 hover:bg-gray-500 px-6 py-2">
+                                取消
+                            </button>
+                        </div>
+                        <p v-if="joinError" class="text-red-600 text-sm mt-2">{{ joinError }}</p>
+                    </form>
+                </div>
             </section>
 
             <!-- 消息 -->
@@ -70,26 +80,69 @@ import axios from 'axios';
 import { useUserStore } from '@/stores/user';
 
 /* ---------- 状态 ---------- */
-const store      = useUserStore();
-const display    = computed(() => store.username || store.useremail || '同学');
-const greeting   = computed(() => `${display.value}同学，欢迎回来！`);
+const store     = useUserStore();
+const display   = computed(() => store.username || store.useremail || '同学');
+const greeting  = computed(() => `${display.value}同学，欢迎回来！`);
 
 interface Course   { id: string; name: string }
 interface Todo     { id: string; title: string }
 interface Message  { id: string; content: string }
 
-const courses   = ref<Course[]>([]);
-const todos     = ref<Todo[]>([]);
-const messages  = ref<Message[]>([]);
+const courses     = ref<Course[]>([]);
+const todos       = ref<Todo[]>([]);
+const messages    = ref<Message[]>([]);
+const showJoinForm = ref(false);
+const newCourseId  = ref('');
+const joining      = ref(false);
+const joinError    = ref('');
 
 /* ---------- 数据拉取 ---------- */
 async function fetchStudentData() {
-    // TODO: 替换为真实后端接口
     const { data } = await axios.get('/api/student/dashboard');
     courses.value  = data.courses   || [];
     todos.value    = data.todos     || [];
     messages.value = data.messages  || [];
 }
-
 onMounted(fetchStudentData);
+
+/* ---------- 方法 ---------- */
+async function joinCourse() {
+    joinError.value = '';
+    if (!newCourseId.value.trim()) {
+        joinError.value = '课程ID不能为空';
+        return;
+    }
+    joining.value = true;
+    try {
+        const { data } = await axios.post(`/api/student/course/${newCourseId.value}/enroll`);
+        const newCourse = data.course;
+        if (newCourse) {
+            courses.value.push(newCourse);
+        }
+        newCourseId.value = '';
+        showJoinForm.value = false;
+    } catch (err) {
+        console.error('选课失败', err);
+        joinError.value = err.response?.data?.message || '选课失败，请稍后重试';
+    } finally {
+        joining.value = false;
+    }
+}
+
+function cancelJoin() {
+    showJoinForm.value = false;
+    joinError.value = '';
+    newCourseId.value = '';
+}
+
+async function dropCourse(courseId: string) {
+    if (!confirm('确定要退选该课程吗？')) return;
+    try {
+        await axios.post(`/api/student/course/${courseId}/drop`);
+        courses.value = courses.value.filter(c => c.id !== courseId);
+    } catch (err) {
+        console.error('退课失败', err);
+        alert('退课失败，请稍后重试');
+    }
+}
 </script>
