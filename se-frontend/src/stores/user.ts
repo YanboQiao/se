@@ -30,6 +30,7 @@ interface UserState {
     token: string | null;
     username: string | null;
     role: 'student' | 'teacher' | null;
+    useremail: string | null;
 }
 
 export const useUserStore = defineStore('user', {
@@ -37,6 +38,7 @@ export const useUserStore = defineStore('user', {
         token: localStorage.getItem('token'),
         username: localStorage.getItem('username'),
         role: localStorage.getItem('role') as 'student' | 'teacher' | null,
+        useremail: localStorage.getItem('useremail'),
     }),
 
     getters: {
@@ -95,9 +97,11 @@ export const useUserStore = defineStore('user', {
             this.token = null;
             this.username = null;
             this.role = null;
+            this.useremail = null;
             localStorage.removeItem('token');
             localStorage.removeItem('username');
             localStorage.removeItem('role');
+            localStorage.removeItem('useremail');
         },
     },
 });
