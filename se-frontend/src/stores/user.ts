@@ -70,7 +70,7 @@ export const useUserStore = defineStore('user', {
             localStorage.setItem('useremail', this.useremail!);
         },
 
-        /** 重置密码 */
+        /** 注册新账号 */
         async register(payload: RegisterPayload) {
             await axios.post('/api/register', payload);
             // 注册成功后可直接调用 login() 或跳转到登录页
