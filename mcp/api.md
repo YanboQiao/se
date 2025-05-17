@@ -11,7 +11,7 @@
 参数
 1. model
 2. user
-3. histort
+3. history
 4. file
 5. knowledgebase == file
 
