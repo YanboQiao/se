@@ -1,51 +1,99 @@
-教师学生表如下 分别放在student teacher两张表下
+# 智能软件工程助手网站 – 数据库设计文档
 
-| useremail             | username | password | token |
-|-----------------------|----------|----------|-------|
-| joeyanbo608@gmail.com | 杨仁树      | 114514   | xxxx  |
+## 1\. 数据库结构设计
 
-以下是 **课程（`course`）实体** 的 Markdown 规格表，便于后端同学直接对照数据库
+智能作业助手系统使用关系型数据库来存储主要业务数据。根据需求分析确定的实体和关系，设计了如下主要数据表：
 
-> 约束说明里若出现 “→ 表.字段” 表示外键指向；如无特别说明可按 MySQL 8.0 默认引擎（InnoDB）创建。
+### 1.1. User (用户) 表
 
-| 字段名             | 数据类型            | 约束 / 默认值                                    | 说明                                                                                                                                                          |
-| --------------- | --------------- |---------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `course_id`     | BIGINT UNSIGNED | **PK**, AUTO\_INCREMENT                     | 课程唯一标识                                                                                                                                                      |
-| `course_name`   | VARCHAR(128)    | NOT NULL                                    | 课程名称                                                                                                                                                        |
-| `course_desc`   | TEXT            | —                                           | 课程简介                                                                                                                                                        |
-| `teacher_email` | VARCHAR(320)    | **FK** → `teacher.teacher_email`, NOT NULL  | 授课教师邮箱                                                                                                                                                      |
-| `start_time`    | DATETIME        | NOT NULL                                    | 开课时间                                                                                                                                                        |
-| `end_time`      | DATETIME        | NOT NULL                                    | 结课时间                                                                                                                                                        |
-| `stuList`       | — (逻辑列)         | —                                           | **指向外部表** `{courseid}_students`：存储本课程全部学生的 `useremail` 列表                                                                                                   |
-| `homeworkList`  | VARCHAR(512)    | —                                           | **指向一级文件夹路径**。该文件夹下按 `1/ 2/ 3/ …` 递增编号，每个子文件夹包含：<br>  • `homeworkRequirement` (作业要求)<br>  • `homeworkAnswer` (标准答案)<br>  • 各学生提交文件，命名规则 `{useremail}.{扩展名}` |
-| `courseware`    | VARCHAR(512)    | —                                           | 课件根目录或关联表路径                                                                                                                                                 |
+存储系统用户的基本信息。
 
-**备注**
+* **主要字段**:  
+  * `useremail` (主键)  
+  * `username` (姓名)  
+  * `password` (密码)  
+  * `token` (32位随机字符串)  
+* **说明**:  
+  * `useremail` 是主键，`username` 不是（后端同学一定注意这一点）。  
+  * `useremail`\+`token` 作为鉴权组合，如果匹配则正常返回数据。  
+  * 分别建立了 `stutent` 和 `teacher` 表，根据前端传回来的不同的 `role` 进行区分。
 
-* `stuList`、`homeworkList`、`courseware` 皆为**引用型字段**：
+### 1.2. Course (课程) 表
 
-  * `stuList` 不实际存在，创建课堂是自动创建一个表格，比如创建了一个课程，course_id为"rg_1"，那么自动创建一个表格，表名叫做"rg_1_students"，依次存放学生的"useremail"。
-  * `homeworkList` 类似于stuList，不实际存在，创建课堂是自动创建一个文件夹，比如创建了一个课程，course_id为"rg_1"，那么自动创建一个文件夹，文件夹叫做"rg_1"，依次存放对应作业的id号，每一次创建作业自动创建新文件夹，比如：目前已有hm1，那么会自动创建文件夹hm2，前端显示作业1，作业2（使用字段拼接）。每一个文件夹需要包含以下内容：homeworkRequirements(作业要求) homeworkAnswer(作业答案)，以及每个学生用usermail+username命名的作业(u202242223_qiaoyanbo.{文件后缀})
-  * `courseware` 同理指向课件专属目录
-  *  `程仕洋`需要建立下面的文件系统：data/{course_id}/homeworkList data/{course_id}/courseware data/{course_id}/homeworkList/{作业序号}
-  * `李天意/李军` 需要与`程仕洋`配合，完成{courseId}_stuList这个表格的建立和维护，并为每一个学生创建一个表格{useremail}_courseList，维护这个学生参加的所有课程
+存储课程的基本信息。
 
-### courseList
-每一个学生一张表，便于拉取该学生的所有参加的课程
-表的命名规范：{useremail}_courseList 举例:joeyanbo608@gmail.com_courseList
+* **主要字段**:  
+  * `course_id` (主键)  
+  * `course_name` (课程名称)  
+  * `coursedesc` (课程描述)  
+  * `teacher_email` (教师邮箱)  
+  * `start_time` (课程开始时间戳, 格式为年月日时分秒，例: `2025-02-01 00:00:00`)  
+  * `end_time` (课程结束时间时间戳, 相同格式)  
+  * `homeworks` (留了几次作业, int整数, 默认为0)
 
-| course_id |
-|-----------|
-| rg_1      |
-| rg_2      |
+### 1.3. 打分表
 
+* **表名**: `{course_id}_{homework_id}` (使用字段拼接形成新的表名)  
+  * **举例**: `rg_01_1` (courseid为 ‘rg\_01’ 这门课的第一次作业的评分列表)  
+* **主要字段**:  
+  * `useremail` (学生邮箱)  
+  * `score` (对应学生在这门课对应作业取得的成绩，使用int)
 
-### `homework`   — 记录课程下每一次布置的作业元数据
-表的命名规范：{course_id}_hw_{homework_no} 举例：rg_1_hw_1
+### 1.4. 学生课程信息表
 
-| studentemail          | score | comment |
-|-----------------------|-------|--------|
-| joeyanbo608@gmail.com | 89    | 全对辣    |
+* **表名**: `{useremail}_course` (使用学生邮箱和 ‘\_course’ 拼接形成新的表名)  
+  * **举例**: `qiaoyanbo408_gmail_com_course`  
+* **主要字段**:  
+  * `course_id` (只有一列，用于存放该学生所有参加的课程的课程id)
 
----
+### 1.5. 作业存储表
 
+**课程作业维护表 {course\_id)\_homeworks**  
+**举例：rg\_01\_homeworks**
+
+| homework\_id作业编号 | homework\_desc作业描述 | deadline截止日期 | 备注 |
+| ----- | ----- | ----- | ----- |
+| 1 | 基础编程练习 | 2025-03-15 23:59:59 | 熟悉编程环境 |
+| 2 | 数据结构实现 | 2025-03-22 23:59:59 | 实现链表和树结构 |
+| ... | ... | ... | ... |
+
+**说明：**
+
+* **作业编号：** 按照课程的作业顺序编号，例如"作业1-base"、"作业2"等。  
+* **作业描述：** 简要描述作业的内容和要求。  
+* **截止日期：** 明确的作业提交截止时间，格式为“年月日时分秒”，如“2025-03-15 23:59:59”。  
+* **教师上传的文件：** 指向教师发布的作业文件的路径，例如 "file/{course\_id}/homework\_01/question.md"。  
+* **教师上传的标准答案：** 指向教师提供的标准答案文件的路径，例如 "file/{course\_id}/homework\_01/answer.md"。  
+* **备注：** 可以添加一些额外的说明或注意事项，例如作业难度、重点等。
+
+**补充：**
+
+* \`{course\_id}\` 需要替换成实际的课程ID，如 "rg\_01"。  
+* 随着课程的进行，您可以继续添加新的作业行。  
+* 表格中的路径格式遵循文档中 "2.1 作业文件存储" 的定义。  
+* 此表格可以在电子表格软件（如 Excel、Google Sheets）中创建和维护，便于管理和更新。
+
+希望这个表格对您有所帮助！如有其他需求，请随时告诉我。
+
+## 2\. 文件及数据存储结构
+
+对于每一个用户，需要创建文件夹。文件夹结构进行如下设计：
+
+### 2.1. 作业文件存储
+
+* **路径格式**: `file/{course_id}/{homework_id}/homework/`  
+* `教师上传的文件放在`: `file/{course_id}/{homework_id}/`  
+* **示例**:  
+  * `file/rg_01/homework_01/homework/qiaoyanbo408_gmail_com.pdf` (学生邮箱为 `qiaoyanbo408@gmail.com` 所上传提交的作业的路径)  
+  * `file/rg_01/homework_01/question.md` (教师上传的作业)  
+  * `file/rg_01/homework_01/answer.md` (教师上传的标准答案)  
+  * `file/rg_01/homework_01/feedback/qiaoyanbo408_gmail_com_py.pdf` (学生邮箱为 `qiaoyanbo408@gmail.com` 所上传提交的作业的评语的路径)
+
+### 2.2. 对话历史存储
+
+* **学生对话历史**:  
+  * 路径格式: `data/student/{useremail}/chat_{id}.md`  
+  * 示例: `data/student/qiaoyanbo408_gmail_com/chat_1.md` (`qiaoyanbo408@gmail.com` 这个学生的第一次对话历史)  
+* **教师对话历史**:  
+  * 路径格式: `data/teacher/{useremail}/chat_{id}.md`  
+  * 示例: `data/teacher/joeyanbo608_gmail_com/chat_2.md` (`joeyanbo608@gmail.com` 这个教师的第二次的对话历史)
