@@ -87,7 +87,7 @@
   * `file/rg_01/homework_01/homework/qiaoyanbo408_gmail_com.pdf` (学生邮箱为 `qiaoyanbo408@gmail.com` 所上传提交的作业的路径)  
   * `file/rg_01/homework_01/question.md` (教师上传的作业)  
   * `file/rg_01/homework_01/answer.md` (教师上传的标准答案)  
-  * `file/rg_01/homework_01/feedback/qiaoyanbo408_gmail_com_py.pdf` (学生邮箱为 `qiaoyanbo408@gmail.com` 所上传提交的作业的评语的路径)
+  * `file/rg_01/homework_01/feedback/qiaoyanbo408_gmail_com_fd.pdf` (学生邮箱为 `qiaoyanbo408@gmail.com` 所上传提交的作业的评语的路径)
 
 ### 2.2. 对话历史存储
 
@@ -97,3 +97,9 @@
 * **教师对话历史**:  
   * 路径格式: `data/teacher/{useremail}/chat_{id}.md`  
   * 示例: `data/teacher/joeyanbo608_gmail_com/chat_2.md` (`joeyanbo608@gmail.com` 这个教师的第二次的对话历史)
+
+### 2.3. 课件路径存储
+
+* **教师上传文件到课件文件夹**:  
+  * 路径格式: `file/{course_id}/courseware/`  
+  * 示例：`file/rg_01/courseware/1.pptx`
