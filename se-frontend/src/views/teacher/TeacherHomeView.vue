@@ -1,10 +1,35 @@
 <template>
     <div class="min-h-screen flex flex-col bg-main-gradient">
         <!-- 顶部栏 -->
-        <header class="p-6 lg:p-8 bg-white/30 backdrop-blur-sm shadow">
+        <header class="p-6 lg:p-8 bg-white/30 backdrop-blur-sm shadow flex items-center justify-between relative">
             <h1 class="text-xl lg:text-2xl font-bold text-gray-800">
                 {{ greeting }}
             </h1>
+            <div class="flex items-center gap-4">
+                <button v-if="!showCourseForm" @click="showCourseForm = true" class="btn-primary px-4 py-2 whitespace-nowrap">
+                    新建课程
+                </button>
+            </div>
+            <div v-if="showCourseForm" class="absolute right-6 top-full mt-2 bg-white/90 p-4 rounded-xl shadow-card w-72 z-10">
+                <h3 class="text-base font-semibold text-gray-800 mb-4">新建课程</h3>
+                <form @submit.prevent="createCourse" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2" for="courseName">课程名称</label>
+                        <input id="courseName" v-model="newCourseName" class="input-control" required />
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2" for="courseDesc">课程简介</label>
+                        <textarea id="courseDesc" v-model="newCourseDesc" rows="2" class="input-control"></textarea>
+                    </div>
+                    <div class="text-center">
+                        <button type="submit" class="btn-primary px-6 py-2 mr-4" :disabled="creatingCourse">提交</button>
+                        <button type="button" @click="cancelCourseForm" class="btn-primary bg-gray-400 hover:bg-gray-500 px-6 py-2">
+                            取消
+                        </button>
+                    </div>
+                    <p v-if="courseFormError" class="text-red-600 text-sm mt-2">{{ courseFormError }}</p>
+                </form>
+            </div>
         </header>
 
         <!-- 主体 -->
@@ -31,31 +56,6 @@
                     </li>
                     <li v-if="!courses.length" class="text-gray-500 text-sm">暂无课程</li>
                 </ul>
-                <div class="mt-6 text-center">
-                    <button v-if="!showCourseForm" @click="showCourseForm = true" class="btn-primary px-6 py-2">
-                        新建课程
-                    </button>
-                </div>
-                <div v-if="showCourseForm" class="mt-6 bg-white/80 p-6 rounded-xl shadow-inner">
-                    <h3 class="text-base font-semibold text-gray-800 mb-4">新建课程</h3>
-                    <form @submit.prevent="createCourse" class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2" for="courseName">课程名称</label>
-                            <input id="courseName" v-model="newCourseName" class="input-control" required />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2" for="courseDesc">课程简介</label>
-                            <textarea id="courseDesc" v-model="newCourseDesc" rows="2" class="input-control"></textarea>
-                        </div>
-                        <div class="text-center">
-                            <button type="submit" class="btn-primary px-6 py-2 mr-4" :disabled="creatingCourse">提交</button>
-                            <button type="button" @click="cancelCourseForm" class="btn-primary bg-gray-400 hover:bg-gray-500 px-6 py-2">
-                                取消
-                            </button>
-                        </div>
-                        <p v-if="courseFormError" class="text-red-600 text-sm mt-2">{{ courseFormError }}</p>
-                    </form>
-                </div>
             </section>
 
             <!-- 学生消息 -->

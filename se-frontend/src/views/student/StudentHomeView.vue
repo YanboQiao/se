@@ -1,15 +1,36 @@
 <template>
     <div class="min-h-screen flex flex-col bg-main-gradient">
         <!-- 顶部栏 -->
-        <header class="p-6 lg:p-8 bg-white/30 backdrop-blur-sm shadow flex items-center justify-between">
+        <header class="p-6 lg:p-8 bg-white/30 backdrop-blur-sm shadow flex items-center justify-between relative">
             <h1 class="text-xl lg:text-2xl font-bold text-gray-800">
                 {{ greeting }}
             </h1>
-            <!-- AI 学习助手入口 -->
-            <a href="http://localhost:8001/llms/" target="_blank" rel="noopener noreferrer"
-               class="bg-indigo-600/90 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition shadow-card">
-                学习有困难？大模型来帮忙！
-            </a>
+            <div class="flex items-center gap-4">
+                <!-- AI 学习助手入口 -->
+                <a href="http://localhost:8001/llms/" target="_blank" rel="noopener noreferrer"
+                   class="bg-indigo-600/90 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition shadow-card">
+                    学习有困难？大模型来帮忙！
+                </a>
+                <button v-if="!showJoinForm" @click="showJoinForm = true" class="btn-primary px-4 py-2 whitespace-nowrap">
+                    加入新课程
+                </button>
+            </div>
+            <div v-if="showJoinForm" class="absolute right-6 top-full mt-2 bg-white/90 p-4 rounded-xl shadow-card w-64 z-10">
+                <h3 class="text-base font-semibold text-gray-800 mb-4">选课</h3>
+                <form @submit.prevent="joinCourse" class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2" for="courseId">课程ID</label>
+                        <input id="courseId" v-model="newCourseId" class="input-control" required placeholder="课程ID或代码" />
+                    </div>
+                    <div class="text-center">
+                        <button type="submit" class="btn-primary px-6 py-2 mr-4" :disabled="joining">提交</button>
+                        <button type="button" @click="cancelJoin" class="btn-primary bg-gray-400 hover:bg-gray-500 px-6 py-2">
+                            取消
+                        </button>
+                    </div>
+                    <p v-if="joinError" class="text-red-600 text-sm mt-2">{{ joinError }}</p>
+                </form>
+            </div>
         </header>
 
         <!-- 主体 -->
@@ -29,7 +50,7 @@
             <section class="bg-glass p-6 overflow-y-auto">
                 <h2 class="text-lg font-semibold text-indigo-700 mb-4">我的课程</h2>
                 <ul class="space-y-3">
-                    <li v-for="course in courses" :key="course.id">
+                    <li v-for="course in courses" :key="course.id" class="flex justify-between items-center">
                         <router-link :to="`/course/${course.id}`" class="link hover:font-medium">
                             {{ course.name }}
                         </router-link>
@@ -37,27 +58,6 @@
                     </li>
                     <li v-if="!courses.length" class="text-gray-500 text-sm">暂无课程</li>
                 </ul>
-                <div class="mt-6 text-center">
-                    <button v-if="!showJoinForm" @click="showJoinForm = true" class="btn-primary px-6 py-2">
-                        加入新课程
-                    </button>
-                </div>
-                <div v-if="showJoinForm" class="mt-6 bg-white/80 p-6 rounded-xl shadow-inner">
-                    <h3 class="text-base font-semibold text-gray-800 mb-4">选课</h3>
-                    <form @submit.prevent="joinCourse" class="space-y-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2" for="courseId">课程ID</label>
-                            <input id="courseId" v-model="newCourseId" class="input-control" required placeholder="课程ID或代码" />
-                        </div>
-                        <div class="text-center">
-                            <button type="submit" class="btn-primary px-6 py-2 mr-4" :disabled="joining">提交</button>
-                            <button type="button" @click="cancelJoin" class="btn-primary bg-gray-400 hover:bg-gray-500 px-6 py-2">
-                                取消
-                            </button>
-                        </div>
-                        <p v-if="joinError" class="text-red-600 text-sm mt-2">{{ joinError }}</p>
-                    </form>
-                </div>
             </section>
 
             <!-- 消息 -->
