@@ -7,7 +7,7 @@
             </h1>
             <div class="flex items-center gap-4">
                 <!-- AI 学习助手入口 -->
-                <a href="http://localhost:8001/llms/" target="_blank" rel="noopener noreferrer"
+                <a href="/llms/" target="_blank" rel="noopener noreferrer"
                    class="bg-indigo-600/90 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition shadow-card">
                     学习有困难？大模型来帮忙！
                 </a>
