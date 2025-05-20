@@ -14,15 +14,15 @@ for mod_dir in "$BACKEND_DIR"/*/; do
     [ -d "$mod_dir" ] || continue
     module=$(basename "$mod_dir")
     echo "Creating virtual environment for $module..."
-    "$PYTHON_BIN" -m venv "$mod_dir/venv"
-    source "$mod_dir/venv/bin/activate"
+    "$PYTHON_BIN" -m venv "$mod_dir/.venv"
+    source "$mod_dir/.venv/bin/activate"
     python -m pip install --upgrade pip >/dev/null
     if [ -f "$mod_dir/requirements.txt" ]; then
         pip install -r "$mod_dir/requirements.txt"
     fi
     deactivate
-    echo "Virtual environment for $module created." 
+    echo "Virtual environment for $module created."
     echo
 done
 
-echo "All backend virtual environments have been created under each module." 
+echo "All backend virtual environments have been created under each module."
