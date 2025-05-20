@@ -3,7 +3,13 @@ import { useUserStore } from '@/stores/user';
 
 /* ---------------- 路由表 ---------------- */
 const routes: RouteRecordRaw[] = [
-    { path: '/', redirect: '/login' },
+    { path: '/', redirect: '/welcome' },
+    {
+        path: '/welcome',
+        name: 'Welcome',
+        component: () => import('@/views/welcome/WelcomeView.vue'),
+        meta: { requiresAuth: false },
+    },
 
     /* === 认证相关 === */
     {
