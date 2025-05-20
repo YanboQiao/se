@@ -25,4 +25,17 @@ for mod_dir in "$BACKEND_DIR"/*/; do
     echo
 done
 
+if [ -d "$(dirname "$0")/gpt_academic" ]; then
+    echo "Creating virtual environment for gpt_academic..."
+    "$PYTHON_BIN" -m venv "$(dirname "$0")/gpt_academic/.venv"
+    source "$(dirname "$0")/gpt_academic/.venv/bin/activate"
+    python -m pip install --upgrade pip >/dev/null
+    if [ -f "$(dirname "$0")/gpt_academic/requirements.txt" ]; then
+        pip install -r "$(dirname "$0")/gpt_academic/requirements.txt"
+    fi
+    deactivate
+    echo "Virtual environment for gpt_academic created."
+    echo
+fi
+
 echo "All backend virtual environments have been created under each module."

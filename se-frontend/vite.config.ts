@@ -24,6 +24,10 @@ export default defineConfig(({mode}) => {
                     target: env.VITE_API_TARGET || 'http://localhost:1010', // ← 后端地址
                     changeOrigin: true
                 },
+                '/llms': {
+                    target: 'http://localhost:8001',
+                    changeOrigin: true
+                },
             },
         },
     };
