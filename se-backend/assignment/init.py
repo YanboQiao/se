@@ -26,98 +26,19 @@ def student_dashboard_api():
         with conn.cursor() as cur:
             # 获取学生已选课程列表
             safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_courseList"
+            course_list_table = f"{safe_email}_course"
             try:
                 cur.execute(f"SELECT course_id FROM `{course_list_table}`")
                 rows = cur.fetchall()
                 course_ids = [row["course_id"] for row in rows]
             except Exception:
                 course_ids = []
-            # 查询每门课程名称
             for cid in course_ids:
-                num_id = None
-                if isinstance(cid, str):
-                    if cid.startswith("course_"):
-                        try:
-                            num_id = int(cid.split("course_")[1])
-                        except:
-                            continue
-                    elif "_" in cid:
-                        try:
-                            num_id = int(cid.split('_')[-1])
-                        except:
-                            continue
-                else:
-                    num_id = cid
-                if num_id is None:
-                    continue
-                cur.execute("SELECT course_name FROM course WHERE course_id=%s", (num_id,))
+                cur.execute("SELECT course_name FROM course WHERE course_id=%s", (cid,))
                 res = cur.fetchone()
                 course_name = res["course_name"] if res else f"课程 {cid}"
-                data_out["courses"].append({"id": str(cid), "name": course_name})
-            # 汇总待办任务（未提交的作业）
-            todos = []
-            for cid in course_ids:
-                num_id = None
-                if isinstance(cid, str):
-                    if cid.startswith("course_"):
-                        try:
-                            num_id = int(cid.split("course_")[1])
-                        except:
-                            continue
-                    elif "_" in cid:
-                        try:
-                            num_id = int(cid.split('_')[-1])
-                        except:
-                            continue
-                else:
-                    num_id = cid
-                if num_id is None:
-                    continue
-                cur.execute("SELECT assign_no, title, due_date FROM assignment WHERE course_id=%s", (num_id,))
-                for asm in cur.fetchall():
-                    assign_no, title, due_date = asm["assign_no"], asm["title"], asm["due_date"]
-                    course_str = _get_course_str_id(num_id)
-                    assignment_table = f"{course_str}_hw_{assign_no}"
-                    try:
-                        cur.execute(f"SELECT 1 FROM `{assignment_table}` WHERE studentemail=%s", (student_email,))
-                        submitted = bool(cur.fetchone())
-                    except Exception:
-                        submitted = False
-                    if not submitted and (due_date is None or due_date >= datetime.datetime.now()):
-                        todos.append({"id": f"{course_str}_hw_{assign_no}", "title": title})
-            data_out["todos"] = todos
-            # 汇总老师评语（教师给该学生的作业反馈）
-            messages = []
-            for cid in course_ids:
-                num_id = None
-                if isinstance(cid, str):
-                    if cid.startswith("course_"):
-                        try:
-                            num_id = int(cid.split("course_")[1])
-                        except:
-                            continue
-                    elif "_" in cid:
-                        try:
-                            num_id = int(cid.split('_')[-1])
-                        except:
-                            continue
-                else:
-                    num_id = cid
-                if num_id is None:
-                    continue
-                cur.execute("SELECT assign_no FROM assignment WHERE course_id=%s", (num_id,))
-                for row in cur.fetchall():
-                    assign_no = row["assign_no"]
-                    assignment_table = f"{_get_course_str_id(num_id)}_hw_{assign_no}"
-                    try:
-                        cur.execute(f"SELECT comment FROM `{assignment_table}` WHERE studentemail=%s", (student_email,))
-                        sub = cur.fetchone()
-                    except Exception:
-                        sub = None
-                    if sub and sub.get("comment"):
-                        messages.append({"id": f"{_get_course_str_id(num_id)}_hw_{assign_no}", "content": sub["comment"]})
-            data_out["messages"] = messages
+                data_out["courses"].append({"id": cid, "name": course_name})
+            # 待办任务和老师评语暂未实现
     finally:
         conn.close()
     return jsonify(data_out), 200
@@ -160,24 +81,9 @@ def get_student_course_api(course_id):
     """学生获取课程详情（课程信息及作业列表）"""
     from flask import g
     student_email = g.user["email"]
-    # 解析课程ID字符串
-    num_id = None
-    if course_id.startswith("course_"):
-        try:
-            num_id = int(course_id.split("course_")[1])
-        except:
-            num_id = None
-    elif "_" in course_id:
-        try:
-            num_id = int(course_id.split('_')[-1])
-        except:
-            num_id = None
-    else:
-        try:
-            num_id = int(course_id)
-        except:
-            num_id = None
-    if num_id is None:
+    # 新结构下课程ID为字符串，直接使用
+    num_id = course_id
+    if not num_id:
         return jsonify({"message": "课程ID无效"}), 400
     conn = get_db_connection()
     data_out = {"course": {}, "assignments": []}
@@ -185,23 +91,23 @@ def get_student_course_api(course_id):
         with conn.cursor() as cur:
             # 验证学生已选该课程
             safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_courseList"
+            course_list_table = f"{safe_email}_course"
             try:
                 cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_id,))
                 if not cur.fetchone():
                     return jsonify({"message": "未选该课程"}), 403
             except Exception:
                 return jsonify({"message": "未选该课程"}), 403
-            cur.execute("SELECT course_name FROM course WHERE course_id=%s", (num_id,))
+            cur.execute("SELECT course_name FROM course WHERE course_id=%s", (course_id,))
             res = cur.fetchone()
             course_name = res["course_name"] if res else f"课程 {course_id}"
             data_out["course"] = {"id": course_id, "name": course_name}
             # 获取课程所有作业列表及提交状态
-            cur.execute("SELECT assign_no, title, due_date FROM assignment WHERE course_id=%s", (num_id,))
+            cur.execute("SELECT assign_no, title, due_date FROM assignment WHERE course_id=%s", (course_id,))
             for asm in cur.fetchall():
                 no, title, due_date = asm["assign_no"], asm["title"], asm["due_date"]
-                assignment_id = f"{_get_course_str_id(num_id)}_hw_{no}"
-                assignment_table = f"{_get_course_str_id(num_id)}_hw_{no}"
+                assignment_id = f"{course_id}_hw_{no}"
+                assignment_table = f"{course_id}_hw_{no}"
                 try:
                     cur.execute(f"SELECT score FROM `{assignment_table}` WHERE studentemail=%s", (student_email,))
                     sub = cur.fetchone()
@@ -381,23 +287,7 @@ def get_student_assignment_api(assignment_id):
     if "_hw_" not in assignment_id:
         return jsonify({"message": "作业ID无效"}), 400
     course_part, assign_no_part = assignment_id.split("_hw_", 1)
-    num_id = None
-    if course_part.startswith("course_"):
-        try:
-            num_id = int(course_part.split("course_")[1])
-        except:
-            num_id = None
-    elif "_" in course_part:
-        try:
-            num_id = int(course_part.split('_')[-1])
-        except:
-            num_id = None
-    else:
-        try:
-            num_id = int(course_part)
-        except:
-            num_id = None
-    if num_id is None or not assign_no_part.isdigit():
+    if not assign_no_part.isdigit():
         return jsonify({"message": "作业ID无效"}), 400
     assign_no = int(assign_no_part)
     conn = get_db_connection()
@@ -405,15 +295,15 @@ def get_student_assignment_api(assignment_id):
         with conn.cursor() as cur:
             # 验证学生参与课程
             safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_courseList"
+            course_list_table = f"{safe_email}_course"
             try:
-                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (_get_course_str_id(num_id),))
+                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_part,))
                 if not cur.fetchone():
                     return jsonify({"message": "无权访问该作业"}), 403
             except Exception:
                 return jsonify({"message": "无权访问该作业"}), 403
             # 查询作业基本信息
-            cur.execute("SELECT title, description, due_date FROM assignment WHERE course_id=%s AND assign_no=%s", (num_id, assign_no))
+            cur.execute("SELECT title, description, due_date FROM assignment WHERE course_id=%s AND assign_no=%s", (course_part, assign_no))
             meta = cur.fetchone()
             if not meta:
                 return jsonify({"message": "作业不存在"}), 404
@@ -449,23 +339,7 @@ def get_teacher_assignment_api(assignment_id):
     if "_hw_" not in assignment_id:
         return jsonify({"message": "作业ID无效"}), 400
     course_part, assign_no_part = assignment_id.split("_hw_", 1)
-    num_id = None
-    if course_part.startswith("course_"):
-        try:
-            num_id = int(course_part.split("course_")[1])
-        except:
-            num_id = None
-    elif "_" in course_part:
-        try:
-            num_id = int(course_part.split('_')[-1])
-        except:
-            num_id = None
-    else:
-        try:
-            num_id = int(course_part)
-        except:
-            num_id = None
-    if num_id is None or not assign_no_part.isdigit():
+    if not assign_no_part.isdigit():
         return jsonify({"message": "作业ID无效"}), 400
     assign_no = int(assign_no_part)
     conn = get_db_connection()
@@ -612,7 +486,7 @@ def enroll_course_api(course_id):
                 return jsonify({"message": "课程不存在"}), 404
             course_name = course["course_name"]
             safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_courseList"
+            course_list_table = f"{safe_email}_course"
             cur.execute(f"CREATE TABLE IF NOT EXISTS `{course_list_table}` (course_id VARCHAR(128) PRIMARY KEY)")
             cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_id_str,))
             if cur.fetchone():
@@ -636,34 +510,15 @@ def drop_course_api(course_id):
     """学生退课（退出课程）"""
     from flask import g
     student_email = g.user["email"]
-    # 解析课程ID
-    if course_id.isdigit():
-        course_id_str = f"course_{course_id}"
-        num_id = int(course_id)
-    else:
-        course_id_str = course_id
-        if course_id.startswith("course_"):
-            try:
-                num_id = int(course_id.split("course_")[1])
-            except:
-                num_id = None
-        elif "_" in course_id:
-            try:
-                num_id = int(course_id.split('_')[-1])
-            except:
-                num_id = None
-        else:
-            try:
-                num_id = int(course_id)
-            except:
-                num_id = None
-    if num_id is None:
+    # 新结构下课程ID为字符串，直接使用
+    course_id_str = course_id
+    if not course_id_str:
         return jsonify({"message": "课程ID无效"}), 400
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_courseList"
+            course_list_table = f"{safe_email}_course"
             try:
                 cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_id_str,))
                 if not cur.fetchone():
@@ -676,13 +531,6 @@ def drop_course_api(course_id):
                 cur.execute(f"DELETE FROM `{students_table}` WHERE studentemail=%s", (student_email,))
             except Exception:
                 pass
-            cur.execute("SELECT assign_no FROM assignment WHERE course_id=%s", (num_id,))
-            for asm in cur.fetchall():
-                assignment_table = f"{course_id_str}_hw_{asm['assign_no']}"
-                try:
-                    cur.execute(f"DELETE FROM `{assignment_table}` WHERE studentemail=%s", (student_email,))
-                except Exception:
-                    continue
         conn.commit()
         return jsonify({"message": "退课成功"}), 200
     except Exception as e:
@@ -813,14 +661,14 @@ def submit_assignment_api(assignment_id):
         with conn.cursor() as cur:
             # 验证学生参与课程
             safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_courseList"
+            course_list_table = f"{safe_email}_course"
             try:
-                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (_get_course_str_id(num_id),))
+                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_part,))
                 if not cur.fetchone():
                     return jsonify({"message": "无权提交此作业"}), 403
             except Exception:
                 return jsonify({"message": "无权提交此作业"}), 403
-            assignment_table = f"{_get_course_str_id(num_id)}_hw_{assign_no}"
+            assignment_table = f"{course_part}_hw_{assign_no}"
             cur.execute(f"SELECT 1 FROM `{assignment_table}` WHERE studentemail=%s", (student_email,))
             if cur.fetchone():
                 return jsonify({"message": "请勿重复提交"}), 400
