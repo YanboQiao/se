@@ -11,25 +11,6 @@
                    class="bg-indigo-600/90 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition shadow-card">
                     学习有困难？大模型来帮忙！
                 </a>
-                <button v-if="!showJoinForm" @click="showJoinForm = true" class="btn-primary px-4 py-2 whitespace-nowrap">
-                    加入新课程
-                </button>
-            </div>
-            <div v-if="showJoinForm" class="absolute right-6 top-full mt-2 bg-white/90 p-4 rounded-xl shadow-card w-64 z-10">
-                <h3 class="text-base font-semibold text-gray-800 mb-4">选课</h3>
-                <form @submit.prevent="joinCourse" class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2" for="courseId">课程ID</label>
-                        <input id="courseId" v-model="newCourseId" class="input-control" required placeholder="课程ID或代码" />
-                    </div>
-                    <div class="text-center">
-                        <button type="submit" class="btn-primary px-6 py-2 mr-4" :disabled="joining">提交</button>
-                        <button type="button" @click="cancelJoin" class="btn-primary bg-gray-400 hover:bg-gray-500 px-6 py-2">
-                            取消
-                        </button>
-                    </div>
-                    <p v-if="joinError" class="text-red-600 text-sm mt-2">{{ joinError }}</p>
-                </form>
             </div>
         </header>
 
@@ -98,7 +79,7 @@ const joinError    = ref('');
 
 /* ---------- 数据拉取 ---------- */
 async function fetchStudentData() {
-    const { data } = await axios.get('/api/student/dashboard');
+    const { data } = await axios.get('http://127.0.0.1:1010/api/student/dashboard');
     courses.value  = data.courses   || [];
     todos.value    = data.todos     || [];
     messages.value = data.messages  || [];

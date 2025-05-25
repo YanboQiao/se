@@ -1,8 +1,9 @@
 import os
 import datetime
-from flask import jsonify, request, current_app, send_file
-from login.auth import student_required, teacher_required
-from login.db import get_db_connection
+import secrets
+from flask import jsonify, request, current_app, send_file, Flask
+from auth import student_required, teacher_required
+from db import get_db_connection
 
 # 工具函数：确保目录存在
 def _ensure_dir(path):
@@ -313,7 +314,7 @@ def get_student_assignment_api(assignment_id):
                 "dueDate": meta["due_date"].strftime("%Y-%m-%d") if meta["due_date"] else None
             }
             # 查询学生提交
-            assignment_table = f"{_get_course_str_id(num_id)}_hw_{assign_no}"
+            assignment_table = f"{course_part}_hw_{assign_no}"
             try:
                 cur.execute(f"SELECT content, score, comment, submit_time FROM `{assignment_table}` WHERE studentemail=%s", (student_email,))
                 sub = cur.fetchone()
@@ -342,6 +343,27 @@ def get_teacher_assignment_api(assignment_id):
     if not assign_no_part.isdigit():
         return jsonify({"message": "作业ID无效"}), 400
     assign_no = int(assign_no_part)
+    
+    # 解析课程ID
+    num_id = None
+    if course_part.startswith("course_"):
+        try:
+            num_id = int(course_part.split("course_")[1])
+        except:
+            num_id = None
+    elif "_" in course_part:
+        try:
+            num_id = int(course_part.split('_')[-1])
+        except:
+            num_id = None
+    else:
+        try:
+            num_id = int(course_part)
+        except:
+            num_id = None
+    if num_id is None:
+        return jsonify({"message": "作业ID无效"}), 400
+        
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -446,96 +468,6 @@ def grade_submission_api(assignment_id):
     except Exception as e:
         conn.rollback()
         return jsonify({"message": f"提交成绩失败: {e}"}), 500
-    finally:
-        conn.close()
-
-@student_required
-def enroll_course_api(course_id):
-    """学生选课（加入课程）"""
-    from flask import g
-    student_email = g.user["email"]
-    # 支持数字ID或字符串ID
-    if course_id.isdigit():
-        course_id_str = f"course_{course_id}"
-        num_id = int(course_id)
-    else:
-        course_id_str = course_id
-        if course_id.startswith("course_"):
-            try:
-                num_id = int(course_id.split("course_")[1])
-            except:
-                num_id = None
-        elif "_" in course_id:
-            try:
-                num_id = int(course_id.split('_')[-1])
-            except:
-                num_id = None
-        else:
-            try:
-                num_id = int(course_id)
-            except:
-                num_id = None
-    if num_id is None:
-        return jsonify({"message": "课程ID无效"}), 400
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT course_name FROM course WHERE course_id=%s", (num_id,))
-            course = cur.fetchone()
-            if not course:
-                return jsonify({"message": "课程不存在"}), 404
-            course_name = course["course_name"]
-            safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_course"
-            cur.execute(f"CREATE TABLE IF NOT EXISTS `{course_list_table}` (course_id VARCHAR(128) PRIMARY KEY)")
-            cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_id_str,))
-            if cur.fetchone():
-                return jsonify({"message": "已在课程中"}), 400
-            cur.execute(f"INSERT INTO `{course_list_table}` (course_id) VALUES (%s)", (course_id_str,))
-            students_table = f"{course_id_str}_students"
-            cur.execute(f"CREATE TABLE IF NOT EXISTS `{students_table}` (studentemail VARCHAR(320) PRIMARY KEY)")
-            cur.execute(f"SELECT 1 FROM `{students_table}` WHERE studentemail=%s", (student_email,))
-            if not cur.fetchone():
-                cur.execute(f"INSERT INTO `{students_table}` (studentemail) VALUES (%s)", (student_email,))
-        conn.commit()
-        return jsonify({"course": {"id": course_id_str, "name": course_name}}), 200
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"message": f"选课失败: {e}"}), 500
-    finally:
-        conn.close()
-
-@student_required
-def drop_course_api(course_id):
-    """学生退课（退出课程）"""
-    from flask import g
-    student_email = g.user["email"]
-    # 新结构下课程ID为字符串，直接使用
-    course_id_str = course_id
-    if not course_id_str:
-        return jsonify({"message": "课程ID无效"}), 400
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_course"
-            try:
-                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_id_str,))
-                if not cur.fetchone():
-                    return jsonify({"message": "未选该课程"}), 400
-            except Exception:
-                return jsonify({"message": "未选该课程"}), 400
-            cur.execute(f"DELETE FROM `{course_list_table}` WHERE course_id=%s", (course_id_str,))
-            students_table = f"{course_id_str}_students"
-            try:
-                cur.execute(f"DELETE FROM `{students_table}` WHERE studentemail=%s", (student_email,))
-            except Exception:
-                pass
-        conn.commit()
-        return jsonify({"message": "退课成功"}), 200
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"message": f"退课失败: {e}"}), 500
     finally:
         conn.close()
 
@@ -713,3 +645,137 @@ def get_file_api(file_id):
     if not target_file:
         return jsonify({"message": "文件不存在"}), 404
     return send_file(os.path.join(upload_dir, target_file), as_attachment=True, download_name=target_file)
+
+@student_required
+def enroll_course_api(course_id):
+    """学生选课接口"""
+    from flask import g
+    student_email = g.user["email"]
+    
+    # 解析课程ID
+    num_id = None
+    if course_id.startswith("course_"):
+        try:
+            num_id = int(course_id.split("course_")[1])
+        except:
+            num_id = None
+    elif "_" in course_id:
+        try:
+            num_id = int(course_id.split('_')[-1])
+        except:
+            num_id = None
+    else:
+        try:
+            num_id = int(course_id)
+        except:
+            num_id = None
+    if num_id is None:
+        return jsonify({"message": "课程ID无效"}), 400
+    
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 检查课程是否存在
+            cur.execute("SELECT course_name FROM course WHERE course_id=%s", (num_id,))
+            course = cur.fetchone()
+            if not course:
+                return jsonify({"message": "课程不存在"}), 404
+            
+            # 检查学生是否已选课
+            safe_email = student_email.replace('@', '_').replace('.', '_')
+            course_list_table = f"{safe_email}_course"
+            
+            # 创建学生选课表（如果不存在）
+            try:
+                cur.execute(f"CREATE TABLE IF NOT EXISTS `{course_list_table}` (course_id INT PRIMARY KEY)")
+            except Exception:
+                pass
+            
+            # 检查是否已经选课
+            try:
+                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (num_id,))
+                if cur.fetchone():
+                    return jsonify({"message": "已经选过该课程"}), 400
+            except Exception:
+                pass
+            
+            # 选课
+            cur.execute(f"INSERT INTO `{course_list_table}` (course_id) VALUES (%s)", (num_id,))
+            
+            # 将学生添加到课程学生表
+            course_str = _get_course_str_id(num_id)
+            students_table = f"{course_str}_students"
+            try:
+                cur.execute(f"INSERT IGNORE INTO `{students_table}` (studentemail) VALUES (%s)", (student_email,))
+            except Exception:
+                pass
+                
+        conn.commit()
+        return jsonify({"message": "选课成功", "course": {"id": course_id, "name": course["course_name"]}}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": f"选课失败: {e}"}), 500
+    finally:
+        conn.close()
+
+@student_required
+def drop_course_api(course_id):
+    """学生退课接口"""
+    from flask import g
+    student_email = g.user["email"]
+    
+    # 解析课程ID
+    num_id = None
+    if course_id.startswith("course_"):
+        try:
+            num_id = int(course_id.split("course_")[1])
+        except:
+            num_id = None
+    elif "_" in course_id:
+        try:
+            num_id = int(course_id.split('_')[-1])
+        except:
+            num_id = None
+    else:
+        try:
+            num_id = int(course_id)
+        except:
+            num_id = None
+    if num_id is None:
+        return jsonify({"message": "课程ID无效"}), 400
+    
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 检查课程是否存在
+            cur.execute("SELECT course_name FROM course WHERE course_id=%s", (num_id,))
+            course = cur.fetchone()
+            if not course:
+                return jsonify({"message": "课程不存在"}), 404
+            
+            # 从学生选课表中删除
+            safe_email = student_email.replace('@', '_').replace('.', '_')
+            course_list_table = f"{safe_email}_course"
+            
+            try:
+                cur.execute(f"DELETE FROM `{course_list_table}` WHERE course_id=%s", (num_id,))
+                if cur.rowcount == 0:
+                    return jsonify({"message": "未选择该课程"}), 400
+            except Exception:
+                return jsonify({"message": "未选择该课程"}), 400
+            
+            # 从课程学生表中删除
+            course_str = _get_course_str_id(num_id)
+            students_table = f"{course_str}_students"
+            try:
+                cur.execute(f"DELETE FROM `{students_table}` WHERE studentemail=%s", (student_email,))
+            except Exception:
+                pass
+                
+        conn.commit()
+        return jsonify({"message": "退课成功"}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": f"退课失败: {e}"}), 500
+    finally:
+        conn.close()

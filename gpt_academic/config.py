@@ -37,7 +37,7 @@ else:
 
 # [step 3]>> 模型选择是 (注意: LLM_MODEL是默认选中的模型, 它*必须*被包含在AVAIL_LLM_MODELS列表中 )
 LLM_MODEL = "gpt-4o"  # 可选 ↓↓↓
-AVAIL_LLM_MODELS = ["claude-3-7-sonnet-20250219", "gpt-4.1", "o4-mini", "o1-mini-2024-09-12",
+AVAIL_LLM_MODELS = ["claude-3-7-sonnet-20250219", "gpt-4o-all", "gpt-4.1", "o4-mini", "o1-mini-2024-09-12",
                     "gpt-4o", "gpt-4o-mini"]
 
 EMBEDDING_MODEL = "text-embedding-3-small"

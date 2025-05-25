@@ -176,5 +176,15 @@ def legacy_reset_password():
 
 
 # ----------------------------------------------------------------------
+# 初始化assignment模块的路由
+# ----------------------------------------------------------------------
+try:
+    import assignment
+    assignment.init_app(app)
+    app.logger.info("Assignment routes initialized successfully")
+except Exception as e:
+    app.logger.error(f"Failed to initialize assignment routes: {e}")
+
+# ----------------------------------------------------------------------
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=1010)
