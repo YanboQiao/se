@@ -8,14 +8,15 @@ app.py —— Flask 3.x 主程序
 """
 from __future__ import annotations
 
-import random, string, time, ssl
+import random, string, time
 from typing import Final
 
 from flask import Flask, jsonify, request, redirect, url_for
 from flask_cors import CORS
 from flask_mailman import EmailMessage, Mail
 
-from db import get_db_connection, login_user, register_user  # 本地模块
+from login.db import get_db_connection, login_user, register_user  # 本地模块
+
 
 # ----------------------------------------------------------------------
 # 常量 & 全局缓存

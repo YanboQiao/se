@@ -5,7 +5,7 @@ auth.py —— 用户身份验证与权限控制
 
 from functools import wraps
 from flask import request, jsonify, g
-from db import get_db_connection
+from login.db import get_db_connection
 
 
 def verify_token(useremail: str, token: str, role_hint: str | None = None) -> str | None:

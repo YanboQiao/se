@@ -1,9 +1,11 @@
-import os
 import datetime
-import secrets
+import os
+
 from flask import jsonify, request, current_app, send_file, Flask
-from auth import student_required, teacher_required
-from db import get_db_connection
+
+from login.auth import student_required, teacher_required
+from login.db import get_db_connection
+
 
 # 工具函数：确保目录存在
 def _ensure_dir(path):
@@ -779,3 +781,4 @@ def drop_course_api(course_id):
         return jsonify({"message": f"退课失败: {e}"}), 500
     finally:
         conn.close()
+
