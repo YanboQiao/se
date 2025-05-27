@@ -79,51 +79,18 @@ const joinError    = ref('');
 
 /* ---------- 数据拉取 ---------- */
 async function fetchStudentData() {
-    const { data } = await axios.get('http://127.0.0.1:1010/api/student/dashboard');
-    courses.value  = data.courses   || [];
-    todos.value    = data.todos     || [];
-    messages.value = data.messages  || [];
+    try {
+        const {data} = await axios.get('/api/student/dashboard', {
+            params: {
+                useremail: store.useremail,
+                token: store.token
+            },
+        });
+        courses.value = data.courses || [];
+    } catch (error) {
+        console.error('获取教师数据失败:', error);
+    }
 }
 onMounted(fetchStudentData);
 
-/* ---------- 方法 ---------- */
-async function joinCourse() {
-    joinError.value = '';
-    if (!newCourseId.value.trim()) {
-        joinError.value = '课程ID不能为空';
-        return;
-    }
-    joining.value = true;
-    try {
-        const { data } = await axios.post(`/api/student/course/${newCourseId.value}/enroll`);
-        const newCourse = data.course;
-        if (newCourse) {
-            courses.value.push(newCourse);
-        }
-        newCourseId.value = '';
-        showJoinForm.value = false;
-    } catch (err) {
-        console.error('选课失败', err);
-        joinError.value = err.response?.data?.message || '选课失败，请稍后重试';
-    } finally {
-        joining.value = false;
-    }
-}
-
-function cancelJoin() {
-    showJoinForm.value = false;
-    joinError.value = '';
-    newCourseId.value = '';
-}
-
-async function dropCourse(courseId: string) {
-    if (!confirm('确定要退选该课程吗？')) return;
-    try {
-        await axios.post(`/api/student/course/${courseId}/drop`);
-        courses.value = courses.value.filter(c => c.id !== courseId);
-    } catch (err) {
-        console.error('退课失败', err);
-        alert('退课失败，请稍后重试');
-    }
-}
 </script>

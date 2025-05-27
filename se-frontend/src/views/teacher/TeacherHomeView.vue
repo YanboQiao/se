@@ -77,8 +77,6 @@ async function fetchTeacherData() {
             },
         });
         courses.value     = data.courses      || [];
-        gradingList.value = data.gradingList  || [];
-        messages.value    = data.messages     || [];
     } catch (error) {
         console.error('获取教师数据失败:', error);
     }
