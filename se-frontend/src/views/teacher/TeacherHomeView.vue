@@ -69,10 +69,19 @@ const messages       = ref<Message[]>([]);
 
 /* ---------- 数据拉取 ---------- */
 async function fetchTeacherData() {
-    const { data } = await axios.get('/api/teacher/dashboard');
-    courses.value     = data.courses      || [];
-    gradingList.value = data.gradingList  || [];
-    messages.value    = data.messages     || [];
+    try {
+        const { data } = await axios.get('/api/teacher/dashboard', {
+            params: {
+                token: store.token,
+                useremail: store.useremail
+            },
+        });
+        courses.value     = data.courses      || [];
+        gradingList.value = data.gradingList  || [];
+        messages.value    = data.messages     || [];
+    } catch (error) {
+        console.error('获取教师数据失败:', error);
+    }
 }
 onMounted(fetchTeacherData);
 
