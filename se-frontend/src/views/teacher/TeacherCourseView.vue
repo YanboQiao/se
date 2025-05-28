@@ -63,6 +63,34 @@
                     </form>
                 </div>
             </section>
+
+            <!-- 学生列表部分 (新增) -->
+            <section class="bg-glass p-6 rounded-2xl mt-6">
+                <h2 class="text-lg font-semibold text-emerald-700 mb-4">选课学生</h2>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full bg-white/80 rounded-lg overflow-hidden">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th class="py-2 px-4 border-b border-gray-200 text-left text-sm text-gray-700">学号/邮箱</th>
+                                <th class="py-2 px-4 border-b border-gray-200 text-left text-sm text-gray-700">姓名</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="student in students" :key="student.email" class="hover:bg-gray-50">
+                                <td class="py-2 px-4 border-b border-gray-200 text-sm">{{ student.email }}</td>
+                                <td class="py-2 px-4 border-b border-gray-200 text-sm font-medium">{{ student.name }}</td>
+                            </tr>
+                            <tr v-if="students.length === 0">
+                                <td colspan="2" class="py-4 text-center text-gray-500 text-sm">暂无学生选课</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-if="loadingStudents" class="text-center py-4 text-gray-500 text-sm">
+                    加载中...
+                </div>
+                <p v-if="studentsError" class="text-red-500 text-sm mt-2">{{ studentsError }}</p>
+            </section>
         </main>
     </div>
 </template>
@@ -71,6 +99,7 @@
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import axios from 'axios';
+import { useUserStore } from '@/stores/user';
 
 /* ---------- 路由参数与状态 ---------- */
 const route       = useRoute();
@@ -79,6 +108,13 @@ const courseName  = ref('');
 interface Assignment { id: string; title: string; dueDate?: string; status?: string }
 const assignments = ref<Assignment[]>([]);
 const loading     = ref(false);
+const store = useUserStore();
+
+/* ---------- 学生数据 (新增) ---------- */
+interface Student { email: string; name: string }
+const students = ref<Student[]>([]);
+const loadingStudents = ref(false);
+const studentsError = ref('');
 
 /* ---------- 新作业表单数据 ---------- */
 const showForm      = ref(false);
@@ -89,20 +125,41 @@ const newRefAnswer  = ref('');
 const submitting    = ref(false);
 const formError     = ref('');
 
-/* ---------- 获取课程及作业列表 ---------- */
+// 修改获取课程信息的函数
 async function fetchCourseData() {
-    loading.value = true;
-    try {
-        const { data } = await axios.get(`/api/teacher/course/${courseId}`);
-        courseName.value   = data.course?.name || `课程 ${courseId}`;
-        assignments.value  = data.assignments || [];
-    } catch (err) {
-        console.error('课程数据加载失败', err);
-    } finally {
-        loading.value = false;
-    }
+  try {
+    const { data } = await axios.get(`/api/teacher/course/${courseId}`, {
+      params: {
+        token: store.token,
+        useremail: store.useremail
+      }
+    });
+    courseName.value = data.course?.name || `课程 ${courseId}`;
+    assignments.value = data.assignments || [];
+  } catch (err) {
+    console.error('获取课程数据失败', err);
+  }
 }
-onMounted(fetchCourseData);
+
+// 修改获取学生列表的函数 
+async function fetchCourseStudents() {
+  try {
+    const { data } = await axios.get(`/api/teacher/course/${courseId}/students`, {
+      params: {
+        token: store.token,
+        useremail: store.useremail
+      }
+    });
+    students.value = data.students || [];
+  } catch (err) {
+    console.error('获取学生列表失败', err);
+  }
+}
+
+onMounted(() => {
+    fetchCourseData();
+    fetchCourseStudents(); // 加载学生列表
+});
 
 /* ---------- 提交新建作业 ---------- */
 async function createAssignment() {
