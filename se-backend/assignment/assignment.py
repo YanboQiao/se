@@ -27,20 +27,20 @@ def student_dashboard_api():
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # 获取学生已选课程列表
-            safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_course"
-            try:
-                cur.execute(f"SELECT course_id FROM `{course_list_table}`")
-                rows = cur.fetchall()
-                course_ids = [row["course_id"] for row in rows]
-            except Exception:
-                course_ids = []
-            for cid in course_ids:
-                cur.execute("SELECT course_name FROM course WHERE course_id=%s", (cid,))
-                res = cur.fetchone()
-                course_name = res["course_name"] if res else f"课程 {cid}"
-                data_out["courses"].append({"id": cid, "name": course_name})
+            # 使用统一的student_course表查询学生已选课程列表
+            cur.execute("""
+                SELECT c.course_id, c.course_name 
+                FROM student_course sc
+                JOIN course c ON sc.course_id = c.course_id
+                WHERE sc.useremail = %s
+            """, (student_email,))
+            rows = cur.fetchall()
+            
+            for row in rows:
+                data_out["courses"].append({
+                    "id": row["course_id"], 
+                    "name": row["course_name"]
+                })
             # 待办任务和老师评语暂未实现
     finally:
         conn.close()
@@ -92,19 +92,19 @@ def get_student_course_api(course_id):
     data_out = {"course": {}, "assignments": []}
     try:
         with conn.cursor() as cur:
-            # 验证学生已选该课程
-            safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_course"
-            try:
-                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_id,))
-                if not cur.fetchone():
-                    return jsonify({"message": "未选该课程"}), 403
-            except Exception:
+            # 验证学生已选该课程(使用student_course表)
+            cur.execute("""
+                SELECT 1 FROM student_course 
+                WHERE useremail = %s AND course_id = %s
+            """, (student_email, course_id))
+            if not cur.fetchone():
                 return jsonify({"message": "未选该课程"}), 403
+                
             cur.execute("SELECT course_name FROM course WHERE course_id=%s", (course_id,))
             res = cur.fetchone()
             course_name = res["course_name"] if res else f"课程 {course_id}"
             data_out["course"] = {"id": course_id, "name": course_name}
+            
             # 获取课程所有作业列表及提交状态
             cur.execute("SELECT assign_no, title, due_date FROM assignment WHERE course_id=%s", (course_id,))
             for asm in cur.fetchall():
@@ -180,6 +180,70 @@ def get_teacher_course_api(course_id):
     finally:
         conn.close()
     return jsonify(data_out), 200
+
+
+
+
+@teacher_required
+def get_course_students_api(course_id):
+    """教师查看选课学生列表"""
+    from flask import g
+    teacher_email = g.user["email"]
+    
+    # 解析课程ID
+    num_id = None
+    if course_id.startswith("course_"):
+        try:
+            num_id = int(course_id.split("course_")[1])
+        except:
+            num_id = None
+    elif "_" in course_id:
+        try:
+            num_id = int(course_id.split('_')[-1])
+        except:
+            num_id = None
+    else:
+        try:
+            num_id = int(course_id)
+        except:
+            num_id = None
+    if num_id is None:
+        return jsonify({"message": "课程ID无效"}), 400
+    
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 验证教师是否为该课程的授课教师
+            cur.execute("SELECT teacher_email FROM course WHERE course_id=%s", (num_id,))
+            course = cur.fetchone()
+            if not course:
+                return jsonify({"message": "课程不存在"}), 404
+            if course["teacher_email"] != teacher_email:
+                return jsonify({"message": "无权限访问该课程"}), 403
+            
+            # 查询选课学生列表(使用student_course表)
+            cur.execute("""
+                SELECT s.useremail, s.username 
+                FROM student_course sc
+                JOIN student s ON sc.useremail = s.useremail
+                WHERE sc.course_id = %s
+                ORDER BY s.username
+            """, (num_id,))
+            
+            students = []
+            for row in cur.fetchall():
+                students.append({
+                    "email": row["useremail"],
+                    "name": row["username"]
+                })
+            
+            return jsonify({"students": students}), 200
+    except Exception as e:
+        return jsonify({"message": f"获取学生列表失败: {e}"}), 500
+    finally:
+        conn.close()
+
+
 
 @teacher_required
 def create_assignment_api(course_id):
@@ -296,15 +360,14 @@ def get_student_assignment_api(assignment_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # 验证学生参与课程
-            safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_course"
-            try:
-                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_part,))
-                if not cur.fetchone():
-                    return jsonify({"message": "无权访问该作业"}), 403
-            except Exception:
+            # 验证学生参与课程(使用student_course表)
+            cur.execute("""
+                SELECT 1 FROM student_course 
+                WHERE useremail = %s AND course_id = %s
+            """, (student_email, course_part))
+            if not cur.fetchone():
                 return jsonify({"message": "无权访问该作业"}), 403
+                
             # 查询作业基本信息
             cur.execute("SELECT title, description, due_date FROM assignment WHERE course_id=%s AND assign_no=%s", (course_part, assign_no))
             meta = cur.fetchone()
@@ -522,11 +585,13 @@ def init_app(app: Flask):
     app.add_url_rule("/api/teacher/assignment/<assignment_id>/grade", endpoint="grade_assignment", view_func=grade_submission_api, methods=["POST"])
     app.add_url_rule("/api/student/assignment/<assignment_id>/submit", endpoint="submit_assignment", view_func=submit_assignment_api, methods=["POST"])
     app.add_url_rule("/api/student/course/<course_id>/enroll", endpoint="enroll_course", view_func=enroll_course_api, methods=["POST"])
-    app.add_url_rule("/api/student/course/<course_id>/drop", endpoint="drop_course", view_func=drop_course_api, methods=["POST"])
     app.add_url_rule("/api/teacher/courses", endpoint="create_course", view_func=create_course_api, methods=["POST"])
     app.add_url_rule("/api/v1/uploadfile", endpoint="upload_file", view_func=upload_file_api, methods=["POST"])
     app.add_url_rule("/api/v1/files/<file_id>", endpoint="get_file", view_func=get_file_api, methods=["GET"])
-
+    app.add_url_rule("/api/teacher/course/<course_id>/students", 
+                     endpoint="course_students", 
+                     view_func=get_course_students_api, 
+                     methods=["GET"])
 def upload_file_api():
     """文件上传接口"""
     file = request.files.get('file')
@@ -593,15 +658,14 @@ def submit_assignment_api(assignment_id):
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # 验证学生参与课程
-            safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_course"
-            try:
-                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (course_part,))
-                if not cur.fetchone():
-                    return jsonify({"message": "无权提交此作业"}), 403
-            except Exception:
+            # 验证学生参与课程(使用student_course表)
+            cur.execute("""
+                SELECT 1 FROM student_course 
+                WHERE useremail = %s AND course_id = %s
+            """, (student_email, course_part))
+            if not cur.fetchone():
                 return jsonify({"message": "无权提交此作业"}), 403
+
             assignment_table = f"{course_part}_hw_{assign_no}"
             cur.execute(f"SELECT 1 FROM `{assignment_table}` WHERE studentemail=%s", (student_email,))
             if cur.fetchone():
@@ -683,28 +747,22 @@ def enroll_course_api(course_id):
             if not course:
                 return jsonify({"message": "课程不存在"}), 404
             
-            # 检查学生是否已选课
-            safe_email = student_email.replace('@', '_').replace('.', '_')
-            course_list_table = f"{safe_email}_course"
+            # 检查是否已经选课(使用student_course表)
+            cur.execute("""
+                SELECT 1 FROM student_course 
+                WHERE useremail = %s AND course_id = %s
+            """, (student_email, num_id))
             
-            # 创建学生选课表（如果不存在）
-            try:
-                cur.execute(f"CREATE TABLE IF NOT EXISTS `{course_list_table}` (course_id INT PRIMARY KEY)")
-            except Exception:
-                pass
+            if cur.fetchone():
+                return jsonify({"message": "已经选过该课程"}), 400
             
-            # 检查是否已经选课
-            try:
-                cur.execute(f"SELECT 1 FROM `{course_list_table}` WHERE course_id=%s", (num_id,))
-                if cur.fetchone():
-                    return jsonify({"message": "已经选过该课程"}), 400
-            except Exception:
-                pass
+            # 选课(使用student_course通用表)
+            cur.execute("""
+                INSERT INTO student_course (useremail, course_id) 
+                VALUES (%s, %s)
+            """, (student_email, num_id))
             
-            # 选课
-            cur.execute(f"INSERT INTO `{course_list_table}` (course_id) VALUES (%s)", (num_id,))
-            
-            # 将学生添加到课程学生表
+            # 将学生添加到课程学生表(兼容旧代码)
             course_str = _get_course_str_id(num_id)
             students_table = f"{course_str}_students"
             try:
