@@ -27,7 +27,7 @@
                 <h2 class="text-lg font-semibold text-emerald-700 mb-4">我的课程</h2>
                 <ul class="space-y-3">
                     <li v-for="course in courses" :key="course.id">
-                        <router-link :to="`/course/${course.id}`" class="link hover:font-medium">
+                        <router-link :to="`/teacher/course/${course.id}`" class="link hover:font-medium">
                             {{ course.name }}
                         </router-link>
                     </li>
