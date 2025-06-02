@@ -20,115 +20,237 @@ def _get_course_str_id(numeric_id):
 
 @student_required
 def student_dashboard_api():
-    """学生仪表盘：返回我的课程、待办任务、老师评语等"""
+    """学生仪表盘：我的课程、待办任务、老师评语（含课程完整信息）"""
     from flask import g
     student_email = g.user["email"]
     data_out = {"courses": [], "todos": [], "messages": []}
+
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # 使用统一的student_course表查询学生已选课程列表
-            cur.execute("""
-                SELECT c.course_id, c.course_name 
+            cur.execute(
+                """
+                SELECT
+                    c.course_id,
+                    c.course_name,
+                    c.course_desc,
+                    c.start_time,
+                    c.end_time,
+                    t.username AS teacher_name
                 FROM student_course sc
-                JOIN course c ON sc.course_id = c.course_id
+                JOIN course         c ON sc.course_id   = c.course_id
+                LEFT JOIN teacher   t ON c.teacher_email = t.useremail
                 WHERE sc.useremail = %s
-            """, (student_email,))
-            rows = cur.fetchall()
-            
-            for row in rows:
-                data_out["courses"].append({
-                    "id": row["course_id"], 
-                    "name": row["course_name"]
-                })
-            # 待办任务和老师评语暂未实现
+                """,
+                (student_email,),
+            )
+            for row in cur.fetchall():
+                data_out["courses"].append(
+                    {
+                        "id":          row["course_id"],
+                        "name":        row["course_name"],
+                        "description": row.get("course_desc") or "",
+                        "startDate":   row["start_time"].strftime("%Y-%m-%d") if row.get("start_time") else None,
+                        "endDate":     row["end_time"].strftime("%Y-%m-%d")   if row.get("end_time")   else None,
+                        "teacher":     row.get("teacher_name") or "",
+                    }
+                )
+            # 待办任务 / 消息 保持空
     finally:
         conn.close()
     return jsonify(data_out), 200
 
+
 @teacher_required
 def teacher_dashboard_api():
-    """教师仪表盘：返回我的课程、待批改作业、学生消息等"""
+    """教师仪表盘：返回我的课程（含统计）、待批改作业、学生消息"""
     from flask import g
     teacher_email = g.user["email"]
+
     data_out = {"courses": [], "gradingList": [], "messages": []}
+    now = datetime.datetime.now()
+
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT course_id, course_name FROM course WHERE teacher_email=%s", (teacher_email,))
+            # 拿到教师课程基本信息
+            cur.execute(
+                """
+                SELECT course_id, course_name, course_desc, start_time, end_time
+                FROM course
+                WHERE teacher_email=%s
+                """,
+                (teacher_email,),
+            )
             courses = cur.fetchall()
             course_ids = [c["course_id"] for c in courses]
-            data_out["courses"] = [{"id": _get_course_str_id(c["course_id"]), "name": c["course_name"]} for c in courses]
-            # 待批改作业列表：存在未评分提交的作业
+
+            # 组装课程统计信息
+            for c in courses:
+                cid = c["course_id"]
+                course_str = _get_course_str_id(cid)
+
+                # 选课人数
+                cur.execute(
+                    "SELECT COUNT(*) AS cnt FROM student_course WHERE course_id=%s",
+                    (cid,),
+                )
+                student_cnt = (cur.fetchone() or {}).get("cnt", 0)
+
+                # 待批改数量（所有作业未评分）
+                cur.execute(
+                    "SELECT assign_no FROM assignment WHERE course_id=%s",
+                    (cid,),
+                )
+                assigns = [row["assign_no"] for row in cur.fetchall()]
+                ungraded_total = 0
+                for no in assigns:
+                    assignment_table = f"{course_str}_hw_{no}"
+                    try:
+                        cur.execute(
+                            f"SELECT COUNT(*) AS cnt FROM `{assignment_table}` WHERE score IS NULL"
+                        )
+                        ungraded_total += (cur.fetchone() or {}).get("cnt", 0)
+                    except Exception:
+                        # 表不存在等异常，忽略
+                        continue
+
+                status_txt = (
+                    "已结束"
+                    if c["end_time"] and c["end_time"] < now
+                    else "进行中"
+                )
+
+                data_out["courses"].append(
+                    {
+                        "id": cid,
+                        "name": c["course_name"],
+                        "description": c.get("course_desc") or "",
+                        "startDate": c["start_time"].strftime("%Y-%m-%d")
+                        if c.get("start_time")
+                        else None,
+                        "endDate": c["end_time"].strftime("%Y-%m-%d")
+                        if c.get("end_time")
+                        else None,
+                        "status": status_txt,
+                        "studentCount": student_cnt,
+                        "ungradedCount": ungraded_total,
+                    }
+                )
+
+            # 生成待批改作业列表（沿用旧逻辑）
             grading_list = []
             for cid in course_ids:
                 course_str = _get_course_str_id(cid)
-                cur.execute("SELECT assign_no, title FROM assignment WHERE course_id=%s", (cid,))
+                cur.execute(
+                    "SELECT assign_no, title FROM assignment WHERE course_id=%s",
+                    (cid,),
+                )
                 for asm in cur.fetchall():
                     assign_no, title = asm["assign_no"], asm["title"]
                     assignment_table = f"{course_str}_hw_{assign_no}"
                     try:
-                        cur.execute(f"SELECT 1 FROM `{assignment_table}` WHERE score IS NULL")
+                        cur.execute(
+                            f"SELECT 1 FROM `{assignment_table}` WHERE score IS NULL LIMIT 1"
+                        )
                         if cur.fetchone():
-                            grading_list.append({"id": f"{course_str}_hw_{assign_no}", "title": title})
+                            grading_list.append(
+                                {
+                                    "id": f"{course_str}_hw_{assign_no}",
+                                    "title": title,
+                                }
+                            )
                     except Exception:
                         continue
             data_out["gradingList"] = grading_list
-            data_out["messages"] = []  # 学生消息（如学生提问）暂无实现
+
+            # 学生消息功能暂无，实现占位
+            data_out["messages"] = []
     finally:
         conn.close()
+
     return jsonify(data_out), 200
 
 @student_required
 def get_student_course_api(course_id):
-    """学生获取课程详情（课程信息及作业列表）"""
+    """学生获取课程详情（含完整信息 + 作业列表）"""
     from flask import g
     student_email = g.user["email"]
-    # 新结构下课程ID为字符串，直接使用
-    num_id = course_id
-    if not num_id:
+
+    if not course_id:
         return jsonify({"message": "课程ID无效"}), 400
+
     conn = get_db_connection()
     data_out = {"course": {}, "assignments": []}
     try:
         with conn.cursor() as cur:
-            # 验证学生已选该课程(使用student_course表)
-            cur.execute("""
-                SELECT 1 FROM student_course 
-                WHERE useremail = %s AND course_id = %s
-            """, (student_email, course_id))
+            # 权限校验
+            cur.execute(
+                "SELECT 1 FROM student_course WHERE useremail=%s AND course_id=%s",
+                (student_email, course_id),
+            )
             if not cur.fetchone():
                 return jsonify({"message": "未选该课程"}), 403
-                
-            cur.execute("SELECT course_name FROM course WHERE course_id=%s", (course_id,))
-            res = cur.fetchone()
-            course_name = res["course_name"] if res else f"课程 {course_id}"
-            data_out["course"] = {"id": course_id, "name": course_name}
-            
-            # 获取课程所有作业列表及提交状态
-            cur.execute("SELECT assign_no, title, due_date FROM assignment WHERE course_id=%s", (course_id,))
+
+            # 课程完整信息
+            cur.execute(
+                """
+                SELECT
+                    c.course_name,
+                    c.course_desc,
+                    c.start_time,
+                    c.end_time,
+                    t.username AS teacher_name
+                FROM course c
+                LEFT JOIN teacher t ON c.teacher_email = t.useremail
+                WHERE c.course_id = %s
+                """,
+                (course_id,),
+            )
+            meta = cur.fetchone()
+            if not meta:
+                return jsonify({"message": "课程不存在"}), 404
+
+            data_out["course"] = {
+                "id":          course_id,
+                "name":        meta["course_name"],
+                "description": meta.get("course_desc") or "",
+                "startDate":   meta["start_time"].strftime("%Y-%m-%d") if meta.get("start_time") else None,
+                "endDate":     meta["end_time"].strftime("%Y-%m-%d")   if meta.get("end_time")   else None,
+                "teacher":     meta.get("teacher_name") or "",
+            }
+
+            # 作业列表（保持原逻辑）
+            cur.execute(
+                "SELECT assign_no, title, due_date FROM assignment WHERE course_id=%s",
+                (course_id,),
+            )
             for asm in cur.fetchall():
                 no, title, due_date = asm["assign_no"], asm["title"], asm["due_date"]
                 assignment_id = f"{course_id}_hw_{no}"
                 assignment_table = f"{course_id}_hw_{no}"
+
                 try:
-                    cur.execute(f"SELECT score FROM `{assignment_table}` WHERE studentemail=%s", (student_email,))
+                    cur.execute(
+                        f"SELECT score FROM `{assignment_table}` WHERE studentemail=%s",
+                        (student_email,),
+                    )
                     sub = cur.fetchone()
                 except Exception:
                     sub = None
-                submitted = bool(sub)
-                score = sub["score"] if sub and sub["score"] is not None else None
-                data_out["assignments"].append({
-                    "id": assignment_id,
-                    "title": title,
-                    "dueDate": due_date.strftime("%Y-%m-%d") if due_date else None,
-                    "submitted": submitted,
-                    "score": score
-                })
+
+                data_out["assignments"].append(
+                    {
+                        "id":        assignment_id,
+                        "title":     title,
+                        "dueDate":   due_date.strftime("%Y-%m-%d") if due_date else None,
+                        "submitted": bool(sub),
+                        "score":     sub["score"] if sub and sub["score"] is not None else None,
+                    }
+                )
     finally:
         conn.close()
     return jsonify(data_out), 200
-
 @teacher_required
 def get_teacher_course_api(course_id):
     """教师获取课程详情（课程信息及作业列表）"""
