@@ -176,8 +176,12 @@ async function createAssignment() {
             dueDate: newDue.value,
             referenceAnswer: newRefAnswer.value
         };
-        const { data } = await axios.post(`/api/teacher/course/${courseId}/assignments`, payload);
-        // 假设后端返回新作业对象
+        // 修改这里，添加第三个参数包含认证信息
+        const { data } = await axios.post(
+            `/api/teacher/course/${courseId}/assignments`, 
+            payload,
+            { params: { token: store.token, useremail: store.useremail } }
+        );
         const created = data.assignment;
         assignments.value.push(created);
         // 重置表单并关闭
