@@ -16,7 +16,7 @@ import pymysql
 # 常量
 # ----------------------------------------------------------------------
 TOKEN_EXPIRE_SECONDS: int = 3600           # token 有效 1 小时
-_CFG_PATH = pathlib.Path(__file__).with_name("db_config.json")
+_CFG_PATH = pathlib.Path(__file__).parent.parent / "db_config.json"
 
 # ----------------------------------------------------------------------
 # 读取数据库配置

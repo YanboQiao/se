@@ -9,9 +9,9 @@
             </h1>
 
             <div class="flex items-center gap-4">
-                <!-- AI 学习助手入口 -->
+                <!-- AI 学习助手入口（携带 useremail / role / token） -->
                 <a
-                    href="http://localhost:8001/llms"
+                    :href="llmUrl"
                     target="_blank"
                     rel="noopener noreferrer"
                     class="bg-indigo-600/90 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700 transition shadow-card"
@@ -52,7 +52,7 @@
                 </ul>
             </section>
 
-            <!-- 课程卡片区 -->
+            <!-- 课程卡片区（已移除退课按钮） -->
             <section class="bg-glass p-6 overflow-y-auto">
                 <h2 class="text-lg font-semibold text-indigo-700 mb-4">
                     我的课程
@@ -65,16 +65,7 @@
                         v-for="course in courses"
                         :key="course.id"
                         :course="course"
-                    >
-                        <template #actions>
-                            <button
-                                @click="dropCourse(course.id)"
-                                class="text-red-600 text-xs hover:underline"
-                            >
-                                退课
-                            </button>
-                        </template>
-                    </CourseCard>
+                    />
                 </div>
 
                 <p v-if="!courses.length" class="text-gray-500 text-sm">
@@ -112,7 +103,7 @@ import { useUserStore } from '@/stores/user';
 import CourseCard from '@/components/CourseCard.vue';
 
 /* ---------- Pinia & Router ---------- */
-const store = useUserStore();
+const store  = useUserStore();
 const router = useRouter();
 
 /* ---------- 计算属性 ---------- */
@@ -120,7 +111,20 @@ const greeting = computed(
     () => `${store.username || store.useremail || '同学'}同学，欢迎回来！`,
 );
 
-/* ---------- 类型 ---------- */
+/* ---------- 大模型跳转 URL ---------- */
+const llmUrl = computed(() => {
+    if (store.useremail && store.token) {
+        const q = new URLSearchParams({
+            useremail: store.useremail,
+            role: 'student',
+            token: store.token,
+        }).toString();
+        return `http://localhost:8001/llms?${q}`;
+    }
+    return 'http://localhost:8001/llms';
+});
+
+/* ---------- 数据类型 ---------- */
 interface CourseDetail {
     id: string;
     name: string;
@@ -129,40 +133,28 @@ interface CourseDetail {
     endDate?: string;
     teacher?: string;
 }
-interface Todo {
-    id: string;
-    title: string;
-}
-interface Message {
-    id: string;
-    content: string;
-}
+interface Todo     { id: string; title: string }
+interface Message  { id: string; content: string }
 
 /* ---------- 状态 ---------- */
-const courses = ref<CourseDetail[]>([]);
-const todos = ref<Todo[]>([]);
+const courses  = ref<CourseDetail[]>([]);
+const todos    = ref<Todo[]>([]);
 const messages = ref<Message[]>([]);
 
 /* ---------- 数据拉取 ---------- */
 async function fetchStudentData() {
     try {
-        // 1. 基础课程列表
         const { data } = await axios.get('/api/student/dashboard', {
             params: { useremail: store.useremail, token: store.token },
         });
         const baseCourses = (data.courses || []) as CourseDetail[];
 
-        // 2. 补全课程详细信息
+        // 并行拉取课程详情
         const detailPromises = baseCourses.map(async (c) => {
             try {
                 const { data: detail } = await axios.get(
                     `/api/student/course/${c.id}`,
-                    {
-                        params: {
-                            useremail: store.useremail,
-                            token: store.token,
-                        },
-                    },
+                    { params: { useremail: store.useremail, token: store.token } },
                 );
                 const info = detail.course || {};
                 return {
@@ -173,8 +165,8 @@ async function fetchStudentData() {
                     endDate: info.endDate,
                     teacher: info.teacher,
                 } as CourseDetail;
-            } catch (err) {
-                console.error(`获取课程 ${c.id} 详情失败`, err);
+            } catch (e) {
+                console.error(`获取课程 ${c.id} 详情失败`, e);
                 return c;
             }
         });
@@ -186,31 +178,13 @@ async function fetchStudentData() {
 }
 onMounted(fetchStudentData);
 
-/* ---------- 操作：退课 ---------- */
-async function dropCourse(courseId: string) {
-    if (!confirm('确定要退选该课程吗？')) return;
-    try {
-        await axios.post(
-            `/api/student/course/${courseId}/drop`,
-            {},
-            { params: { useremail: store.useremail, token: store.token } },
-        );
-        courses.value = courses.value.filter((c) => c.id !== courseId);
-    } catch (err) {
-        console.error('退课失败:', err);
-        alert('退课失败，请稍后再试');
-    }
-}
-
-/* ---------- 操作：退出登录 ---------- */
+/* ---------- 退出登录 ---------- */
 function logout() {
-    // 若 Pinia store 实现了 reset / logout，请优先调用
     if (typeof store.logout === 'function') {
         store.logout();
     } else if (typeof store.$reset === 'function') {
         store.$reset();
     } else {
-        // 回退写法：手动清空关键字段
         store.token = '';
         store.useremail = '';
         store.username = '';

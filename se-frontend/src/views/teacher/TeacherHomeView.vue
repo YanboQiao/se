@@ -9,6 +9,17 @@
             </h1>
 
             <div class="flex items-center gap-4">
+                <!-- AI 学习助手入口（携带 useremail / role / token） -->
+                <a
+                    :href="llmUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="bg-emerald-600/90 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 transition shadow-card"
+                >
+                    大模型助手
+                </a>
+
+                <!-- 退出登录 -->
                 <button
                     @click="logout"
                     class="text-red-600 hover:underline text-sm whitespace-nowrap"
@@ -95,13 +106,26 @@ import { useUserStore } from '@/stores/user';
 import TeacherCourseCard from '@/components/TeacherCourseCard.vue';
 
 /* ---------- Pinia & Router ---------- */
-const store = useUserStore();
+const store  = useUserStore();
 const router = useRouter();
 
 /* ---------- 计算属性 ---------- */
 const greeting = computed(
     () => `${store.username || store.useremail || '老师'}老师，欢迎回来！`,
 );
+
+/* ---------- 大模型跳转 URL ---------- */
+const llmUrl = computed(() => {
+    if (store.useremail && store.token) {
+        const q = new URLSearchParams({
+            useremail: store.useremail,
+            role: 'teacher',
+            token: store.token,
+        }).toString();
+        return `http://localhost:8001/llms?${q}`;
+    }
+    return 'http://localhost:8001/llms';
+});
 
 /* ---------- 类型 ---------- */
 interface CourseDetail {
@@ -114,19 +138,13 @@ interface CourseDetail {
     studentCount?: number;
     ungradedCount?: number;
 }
-interface Task {
-    id: string;
-    title: string;
-}
-interface Message {
-    id: string;
-    content: string;
-}
+interface Task     { id: string; title: string }
+interface Message  { id: string; content: string }
 
 /* ---------- 状态 ---------- */
-const courses = ref<CourseDetail[]>([]);
-const gradingList = ref<Task[]>([]);
-const messages = ref<Message[]>([]);
+const courses      = ref<CourseDetail[]>([]);
+const gradingList  = ref<Task[]>([]);
+const messages     = ref<Message[]>([]);
 
 /* ---------- 数据拉取 ---------- */
 async function fetchTeacherData() {
@@ -134,11 +152,11 @@ async function fetchTeacherData() {
         const { data } = await axios.get('/api/teacher/dashboard', {
             params: { useremail: store.useremail, token: store.token },
         });
-        courses.value = (data.courses || []) as CourseDetail[];
+        courses.value     = (data.courses || []) as CourseDetail[];
         gradingList.value = data.gradingList || [];
-        messages.value = data.messages || [];
-    } catch (error) {
-        console.error('获取教师数据失败:', error);
+        messages.value    = data.messages    || [];
+    } catch (e) {
+        console.error('获取教师数据失败:', e);
     }
 }
 onMounted(fetchTeacherData);
