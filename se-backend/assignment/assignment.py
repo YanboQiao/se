@@ -369,105 +369,135 @@ def get_course_students_api(course_id):
 
 @teacher_required
 def create_assignment_api(course_id):
-    """教师在课程中布置新作业"""
+    """教师在课程中布置新作业
+    
+    Args:
+        course_id: 课程ID，可以是"course_X"格式或纯数字
+        
+    请求体格式:
+    {
+        "title": "作业标题",
+        "description": "作业描述",
+        "dueDate": "2025-06-30",  # 可选，YYYY-MM-DD格式
+        "referenceAnswer": "参考答案"  # 可选
+    }
+    
+    Returns:
+        成功: 200 OK, {"assignment": {...}}
+        失败: 400/403/404/500 错误信息
+    """
     from flask import g
     teacher_email = g.user["email"]
     data = request.get_json(silent=True) or {}
+    
+    # 1. 获取并验证请求参数
     title = data.get("title")
     description = data.get("description", "")
     due_date_str = data.get("dueDate")
     reference_answer = data.get("referenceAnswer", "")
+    
+    # 验证必填字段
     if not title or not title.strip():
         return jsonify({"message": "标题不能为空"}), 400
-    # 解析课程ID
-    num_id = None
+    
+    # 2. 解析课程ID - 支持字符串格式
+    clean_course_id = course_id
     if course_id.startswith("course_"):
-        try:
-            num_id = int(course_id.split("course_")[1])
-        except:
-            num_id = None
-    elif "_" in course_id:
-        try:
-            num_id = int(course_id.split('_')[-1])
-        except:
-            num_id = None
-    else:
-        try:
-            num_id = int(course_id)
-        except:
-            num_id = None
-    if num_id is None:
-        return jsonify({"message": "课程ID无效"}), 400
+        clean_course_id = course_id.replace("course_", "")
+    
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT teacher_email FROM course WHERE course_id=%s", (num_id,))
+            # 3. 验证教师权限
+            cur.execute("SELECT teacher_email FROM course WHERE course_id=%s", (clean_course_id,))
             res = cur.fetchone()
             if not res:
                 return jsonify({"message": "课程不存在"}), 404
             if res["teacher_email"] != teacher_email:
-                return jsonify({"message": "无权限"}), 403
-            # 新作业序号
-            cur.execute("SELECT MAX(assign_no) AS max_no FROM assignment WHERE course_id=%s", (num_id,))
+                return jsonify({"message": "无权在此课程下创建作业"}), 403
+            
+            # 4. 获取新作业序号
+            cur.execute("SELECT MAX(assign_no) AS max_no FROM assignment WHERE course_id=%s", (clean_course_id,))
             row = cur.fetchone()
             next_no = (row["max_no"] + 1) if row and row["max_no"] else 1
+            
+            # 5. 处理截止日期
             due_date = None
             if due_date_str:
                 try:
                     due_date = datetime.datetime.strptime(due_date_str, "%Y-%m-%d")
                 except:
-                    due_date = None
-            # 插入作业记录
+                    return jsonify({"message": "日期格式无效，请使用YYYY-MM-DD格式"}), 400
+            
+            # 6. 插入作业记录
             cur.execute(
                 "INSERT INTO assignment (course_id, assign_no, title, description, due_date, reference_answer) VALUES (%s,%s,%s,%s,%s,%s)",
-                (num_id, next_no, title, description, due_date, reference_answer)
+                (clean_course_id, next_no, title, description, due_date, reference_answer)
             )
-            # 创建作业提交记录表
-            course_str = _get_course_str_id(num_id)
-            assignment_table = f"{course_str}_hw_{next_no}"
+            
+            # 7. 创建作业提交表 (这里使用单独的表而不是一个表，与您现有的实现保持一致)
+            assignment_table = f"course_{clean_course_id}_hw_{next_no}"
             create_sql = (
-                f"CREATE TABLE `{assignment_table}` ("
-                "studentemail VARCHAR(320) NOT NULL, "
-                "content TEXT, score INT, comment TEXT, submit_time DATETIME, "
-                "PRIMARY KEY (studentemail))"
+                f"CREATE TABLE IF NOT EXISTS `{assignment_table}` ("
+                "studentemail VARCHAR(100) NOT NULL, "
+                "content TEXT, "
+                "score INT, "
+                "comment TEXT, "
+                "submit_time DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                "PRIMARY KEY (studentemail), "
+                "CONSTRAINT `fk_{assignment_table}_student` FOREIGN KEY (studentemail) "
+                "REFERENCES student(useremail) ON DELETE CASCADE ON UPDATE CASCADE"
+                ")"
             )
             cur.execute(create_sql)
-        conn.commit()
-        # 创建作业文件夹结构
-        base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-        course_folder = os.path.join(base_dir, course_str)
-        _ensure_dir(course_folder)
-        _ensure_dir(os.path.join(course_folder, "homeworkList"))
-        asm_folder = os.path.join(course_folder, "homeworkList", f"hm{next_no}")
-        _ensure_dir(asm_folder)
-        if description:
-            try:
-                with open(os.path.join(asm_folder, "homeworkRequirement.txt"), "w", encoding="utf-8") as f:
-                    f.write(description)
-            except Exception as e:
-                current_app.logger.error(f"Failed to write homeworkRequirement: {e}")
-        if reference_answer:
-            try:
-                with open(os.path.join(asm_folder, "homeworkAnswer.txt"), "w", encoding="utf-8") as f:
-                    f.write(reference_answer)
-            except Exception as e:
-                current_app.logger.error(f"Failed to write homeworkAnswer: {e}")
-        status = ""
-        if due_date:
-            status = "已截止" if due_date < datetime.datetime.now() else "进行中"
-        assignment_data = {
-            "id": f"{course_str}_hw_{next_no}",
-            "title": title,
-            "dueDate": due_date.strftime("%Y-%m-%d") if due_date else None,
-            "status": status
-        }
-        return jsonify({"assignment": assignment_data}), 200
+            
+            # 8. 提交事务
+            conn.commit()
+            
+            # 9. 创建作业文件存储目录
+            base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+            course_folder = os.path.join(base_dir, f"course_{clean_course_id}")
+            _ensure_dir(course_folder)
+            _ensure_dir(os.path.join(course_folder, "assignments"))
+            asm_folder = os.path.join(course_folder, "assignments", f"assignment_{next_no}")
+            _ensure_dir(asm_folder)
+            
+            # 10. 保存作业说明和参考答案文件
+            if description:
+                try:
+                    with open(os.path.join(asm_folder, "description.txt"), "w", encoding="utf-8") as f:
+                        f.write(description)
+                except Exception as e:
+                    current_app.logger.error(f"保存作业描述文件失败: {e}")
+            
+            if reference_answer:
+                try:
+                    with open(os.path.join(asm_folder, "reference_answer.txt"), "w", encoding="utf-8") as f:
+                        f.write(reference_answer)
+                except Exception as e:
+                    current_app.logger.error(f"保存参考答案文件失败: {e}")
+            
+            # 11. 构建响应数据
+            status = ""
+            if due_date:
+                status = "已截止" if due_date < datetime.datetime.now() else "进行中"
+            
+            assignment_data = {
+                "id": f"course_{clean_course_id}_hw_{next_no}",
+                "title": title,
+                "dueDate": due_date.strftime("%Y-%m-%d") if due_date else None,
+                "status": status
+            }
+            
+            return jsonify({"assignment": assignment_data}), 200
+            
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": f"创建作业失败: {e}"}), 500
+        return jsonify({"message": f"创建作业失败: {str(e)}"}), 500
     finally:
         conn.close()
 
+        
 @student_required
 def get_student_assignment_api(assignment_id):
     """学生获取作业详情和自己的提交"""
