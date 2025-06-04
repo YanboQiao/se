@@ -37,6 +37,23 @@ def register_api(email, name, pwd, role):
                                    "password": pwd, "role": role})
 
 # ------------------------------------------------------------------- #
+#  插件信息编码函数（从main.py复制）
+# ------------------------------------------------------------------- #
+def encode_plugin_info(k, plugin)->str:
+    import copy
+    from themes.theme import to_cookie_str
+    plugin_ = copy.copy(plugin)
+    plugin_.pop("Function", None)
+    plugin_.pop("Class", None)
+    plugin_.pop("Button", None)
+    plugin_["Info"] = plugin.get("Info", k)
+    if plugin.get("AdvancedArgs", False):
+        plugin_["Label"] = f"插件[{k}]的高级参数说明：" + plugin.get("ArgsReminder", f"没有提供高级参数功能说明")
+    else:
+        plugin_["Label"] = f"插件[{k}]不需要高级参数。"
+    return to_cookie_str(plugin_)
+
+# ------------------------------------------------------------------- #
 #  认证中间件 - 包装predict函数以携带认证信息
 # ------------------------------------------------------------------- #
 class AuthenticatedPredict:
@@ -329,10 +346,10 @@ def main() -> None:
                         with gr.Row():
                             with gr.Accordion("更多函数插件", open=True):
                                 dropdown_fn_list = []
-                                for n,p in plugins.items():
-                                    if match_group(p['Group'], DEFAULT_FN_GROUPS) and \
-                                       (not p.get("AsButton",True) or p.get("AdvancedArgs",False)):
-                                        dropdown_fn_list.append(n)
+                                for name,plugin in plugins.items():
+                                    if match_group(plugin['Group'], DEFAULT_FN_GROUPS) and \
+                                       (not plugin.get("AsButton",True) or plugin.get("AdvancedArgs",False)):
+                                        dropdown_fn_list.append(name)
                                 dropdown = gr.Dropdown(dropdown_fn_list,
                                                        value="点击这里输入「关键词」搜索插件",
                                                        label="", show_label=False).style(container=False)
@@ -425,13 +442,40 @@ def main() -> None:
                                  [chatbot, txt, txt2, cookies]).then(None,None,None,
                                  _js="()=>{toast_push('上传完毕 ...'); cancel_loading_status();}")
 
-            # ---- 插件按钮绑定（简化：采用旧逻辑，只支持函数式插件）----
-            for name, plugin in plugins.items():
-                if plugin.get("AsButton", True) and plugin.get("Function"):
-                    plugin['Button'].click(
-                        fn=ArgsGeneralWrapper(plugin["Function"]),
-                        inputs=input_combo + [gr.State(True), gr.State(name)],
-                        outputs=output_combo)
+            # ---- 插件按钮绑定（修复：使用JavaScript方式，与main.py一致）----
+            register_advanced_plugin_init_arr = ""
+            for k in plugins:
+                register_advanced_plugin_init_arr += f"""register_plugin_init("{k}","{encode_plugin_info(k, plugins[k])}");"""
+                if plugins[k].get("Class", None):
+                    plugins[k]["JsMenu"] = plugins[k]["Class"]().get_js_code_for_generating_menu(k)
+                    register_advanced_plugin_init_arr += """register_advanced_plugin_init_code("{k}","{gui_js}");""".format(k=k, gui_js=plugins[k]["JsMenu"])
+                if not plugins[k].get("AsButton", True): continue
+                if plugins[k].get("Class", None) is None:
+                    assert plugins[k].get("Function", None) is not None
+                    click_handle = plugins[k]["Button"].click(None, inputs=[], outputs=None, _js=f"""()=>run_classic_plugin_via_id("{plugins[k]["ButtonElemId"]}")""")
+                else:
+                    click_handle = plugins[k]["Button"].click(None, inputs=[], outputs=None, _js=f"""()=>run_advanced_plugin_launch_code("{k}")""")
+
+            # 注册switchy_bt的JavaScript回调
+            switchy_bt.click(None, [switchy_bt], None, _js="(switchy_bt)=>on_flex_button_click(switchy_bt)")
+            
+            # 随变按钮的回调函数注册
+            def route(request: gr.Request, k, *args, **kwargs):
+                if k in [r"未选定任何插件", r""]: return
+                yield from ArgsGeneralWrapper(plugins[k]["Function"])(request, *args, **kwargs)
+                
+            # 旧插件的高级参数区确认按钮（隐藏）
+            old_plugin_callback = gr.Button(r"未选定任何插件", variant="secondary", visible=False, elem_id="old_callback_btn_for_plugin_exe")
+            click_handle_ng = old_plugin_callback.click(route, [switchy_bt, *input_combo], output_combo)
+            cancel_handles.append(click_handle_ng)
+            
+            # 新一代插件的高级参数区确认按钮（隐藏）
+            click_handle_ng = new_plugin_callback.click(route_switchy_bt_with_arg,
+                [
+                    gr.State(["new_plugin_callback", "usr_confirmed_arg"] + input_combo_order),
+                    new_plugin_callback, usr_confirmed_arg, *input_combo
+                ], output_combo)
+            cancel_handles.append(click_handle_ng)
 
             # ---- 停止按钮 ----
             stopBtn.click(fn=None, inputs=None, outputs=None, cancels=cancel_handles)
@@ -473,6 +517,7 @@ def main() -> None:
                               *predefined_btns.values()], _js="persistent_cookie_init")
             app.load(None, inputs=[], outputs=None,
                      _js=f"()=>GptAcademicJavaScriptInit('{DARK_MODE}','{INIT_SYS_PROMPT}','{ADD_WAIFU}','{LAYOUT}','{TTS_TYPE}')")
+            app.load(None, inputs=[], outputs=None, _js=f"""()=>{{{register_advanced_plugin_init_arr}}}""")
 
             # ---- 语音（可选） ----
             if ENABLE_AUDIO:
