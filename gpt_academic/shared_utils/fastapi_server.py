@@ -110,7 +110,7 @@ def start_app(app_block, CONCURRENT_COUNT, AUTHENTICATION, PORT, SSL_KEYFILE, SS
     import uvicorn
     import fastapi
     import gradio as gr
-    from fastapi import FastAPI
+    from fastapi import FastAPI, Request
     from gradio.routes import App
     from toolbox import get_conf
     CUSTOM_PATH, PATH_LOGGING = get_conf('CUSTOM_PATH', 'PATH_LOGGING')
@@ -118,9 +118,9 @@ def start_app(app_block, CONCURRENT_COUNT, AUTHENTICATION, PORT, SSL_KEYFILE, SS
     # --- --- configurate gradio app block --- ---
     app_block:gr.Blocks
     app_block.ssl_verify = False
-    app_block.auth_message = '请登录'
+    app_block.auth_message = ''
     app_block.favicon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "docs/logo.png")
-    app_block.auth = AUTHENTICATION if len(AUTHENTICATION) != 0 else None
+    app_block.auth = None
     app_block.blocked_paths = ["config.py", "__pycache__", "config_private.py", "docker-compose.yml", "Dockerfile", f"{PATH_LOGGING}/admin"]
     app_block.dev_mode = False
     app_block.config = app_block.get_config_file()
@@ -142,57 +142,25 @@ def start_app(app_block, CONCURRENT_COUNT, AUTHENTICATION, PORT, SSL_KEYFILE, SS
         if route.path == "/proxy={url_path:path}":
             gradio_app.router.routes.remove(route)
     # --- --- replace gradio endpoint to forbid access to sensitive files --- ---
-    if len(AUTHENTICATION) > 0:
-        dependencies = []
-        endpoint = None
-        for route in list(gradio_app.router.routes):
-            if route.path == "/file/{path:path}":
-                gradio_app.router.routes.remove(route)
-            if route.path == "/file={path_or_url:path}":
-                dependencies = route.dependencies
-                endpoint = route.endpoint
-                gradio_app.router.routes.remove(route)
-        @gradio_app.get("/file/{path:path}", dependencies=dependencies)
-        @gradio_app.head("/file={path_or_url:path}", dependencies=dependencies)
-        @gradio_app.get("/file={path_or_url:path}", dependencies=dependencies)
-        async def file(path_or_url: str, request: fastapi.Request):
-            if not _authorize_user(path_or_url, request, gradio_app):
-                return "越权访问!"
-            stripped = path_or_url.lstrip().lower()
-            if stripped.startswith("https://") or stripped.startswith("http://"):
-                return "账户密码授权模式下, 禁止链接!"
-            if '../' in stripped:
-                return "非法路径!"
-            return await endpoint(path_or_url, request)
-
-        from fastapi import Request, status
-        from fastapi.responses import FileResponse, RedirectResponse
-        @gradio_app.get("/academic_logout")
-        async def logout():
-            response = RedirectResponse(url=CUSTOM_PATH, status_code=status.HTTP_302_FOUND)
-            response.delete_cookie('access-token')
-            response.delete_cookie('access-token-unsecure')
-            return response
-    else:
-        dependencies = []
-        endpoint = None
-        for route in list(gradio_app.router.routes):
-            if route.path == "/file/{path:path}":
-                gradio_app.router.routes.remove(route)
-            if route.path == "/file={path_or_url:path}":
-                dependencies = route.dependencies
-                endpoint = route.endpoint
-                gradio_app.router.routes.remove(route)
-        @gradio_app.get("/file/{path:path}", dependencies=dependencies)
-        @gradio_app.head("/file={path_or_url:path}", dependencies=dependencies)
-        @gradio_app.get("/file={path_or_url:path}", dependencies=dependencies)
-        async def file(path_or_url: str, request: fastapi.Request):
-            stripped = path_or_url.lstrip().lower()
-            if stripped.startswith("https://") or stripped.startswith("http://"):
-                return "账户密码授权模式下, 禁止链接!"
-            if '../' in stripped:
-                return "非法路径!"
-            return await endpoint(path_or_url, request)
+    dependencies = []
+    endpoint = None
+    for route in list(gradio_app.router.routes):
+        if route.path == "/file/{path:path}":
+            gradio_app.router.routes.remove(route)
+        if route.path == "/file={path_or_url:path}":
+            dependencies = route.dependencies
+            endpoint = route.endpoint
+            gradio_app.router.routes.remove(route)
+    @gradio_app.get("/file/{path:path}", dependencies=dependencies)
+    @gradio_app.head("/file={path_or_url:path}", dependencies=dependencies)
+    @gradio_app.get("/file={path_or_url:path}", dependencies=dependencies)
+    async def file(path_or_url: str, request: fastapi.Request):
+        stripped = path_or_url.lstrip().lower()
+        if stripped.startswith("https://") or stripped.startswith("http://"):
+            return "账户密码授权模式下, 禁止链接!"
+        if '../' in stripped:
+            return "非法路径!"
+        return await endpoint(path_or_url, request)
 
     # --- --- enable TTS (text-to-speech) functionality --- ---
     TTS_TYPE = get_conf("TTS_TYPE")
@@ -255,6 +223,58 @@ def start_app(app_block, CONCURRENT_COUNT, AUTHENTICATION, PORT, SSL_KEYFILE, SS
     # --- --- FastAPI --- ---
     fastapi_app = FastAPI(lifespan=app_lifespan)
     fastapi_app.mount(CUSTOM_PATH, gradio_app)
+
+    # session storage for simple login
+    SESSIONS: dict[str, str] = {}
+    from secrets import token_hex
+    from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+    from fastapi import Form
+
+    login_html_path = os.path.join(os.path.dirname(__file__), "..", "templates", "login.html")
+    with open(login_html_path, encoding="utf-8") as fp:
+        LOGIN_PAGE = fp.read()
+
+    @fastapi_app.get(f"{CUSTOM_PATH}login", response_class=HTMLResponse)
+    async def login_page():
+        return HTMLResponse(LOGIN_PAGE)
+
+    @fastapi_app.post(f"{CUSTOM_PATH}login")
+    async def login(useremail: str = Form(...), password: str = Form(...), next: str = Form("/llms")):
+        from backend_auth import verify_user_credentials
+        if verify_user_credentials(useremail, password):
+            tok = token_hex(16)
+            SESSIONS[tok] = useremail
+            resp = JSONResponse({"next": next})
+            resp.set_cookie("llms_session", tok, httponly=True)
+            return resp
+        return JSONResponse({"error": "登录失败"}, status_code=401)
+
+    @fastapi_app.get(f"{CUSTOM_PATH}logout")
+    async def logout(next: str = "/llms/login"):
+        resp = RedirectResponse(url=next, status_code=302)
+        resp.delete_cookie("llms_session")
+        return resp
+
+    @fastapi_app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+        if request.url.path.startswith(CUSTOM_PATH) and not request.url.path.startswith(f"{CUSTOM_PATH}login"):
+            token = request.cookies.get("llms_session")
+            if token in SESSIONS:
+                request.state.llm_user = SESSIONS[token]
+                return await call_next(request)
+            qp = request.query_params
+            u, t = qp.get("useremail"), qp.get("token")
+            if u and t:
+                from backend_auth import verify_user_token
+                if verify_user_token(u, t, qp.get("role")):
+                    tok = token_hex(16)
+                    SESSIONS[tok] = u
+                    url = str(request.url).split("?",1)[0]
+                    resp = RedirectResponse(url=url, status_code=302)
+                    resp.set_cookie("llms_session", tok, httponly=True)
+                    return resp
+            return RedirectResponse(url=f"{CUSTOM_PATH}login?next={request.url.path}", status_code=302)
+        return await call_next(request)
 
     # --- --- favicon and block fastapi api reference routes --- ---
     from starlette.responses import JSONResponse
