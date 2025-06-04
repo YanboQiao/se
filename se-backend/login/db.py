@@ -100,3 +100,19 @@ def login_user(
         return False, f"登录失败: {exc}", None
     finally:
         conn.close()
+
+def check_user_credentials(useremail: str, password: str) -> bool:
+    """Return True if the email/password matches a student or teacher"""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            for table in ("student", "teacher"):
+                cur.execute(f"SELECT password FROM {table} WHERE useremail=%s", (useremail,))
+                row = cur.fetchone()
+                if row and row.get("password") == password:
+                    return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+    return False

@@ -113,6 +113,12 @@ def start_app(app_block, CONCURRENT_COUNT, AUTHENTICATION, PORT, SSL_KEYFILE, SS
     from fastapi import FastAPI, Request
     from gradio.routes import App
     from toolbox import get_conf
+    import sys
+    from pathlib import Path
+
+    BACKEND_PATH = Path(__file__).resolve().parents[2] / "se-backend"
+    if str(BACKEND_PATH) not in sys.path:
+        sys.path.insert(0, str(BACKEND_PATH))
     CUSTOM_PATH, PATH_LOGGING = get_conf('CUSTOM_PATH', 'PATH_LOGGING')
 
     # --- --- configurate gradio app block --- ---
@@ -240,8 +246,8 @@ def start_app(app_block, CONCURRENT_COUNT, AUTHENTICATION, PORT, SSL_KEYFILE, SS
 
     @fastapi_app.post(f"{CUSTOM_PATH}login")
     async def login(useremail: str = Form(...), password: str = Form(...), next: str = Form("/llms")):
-        from backend_auth import verify_user_credentials
-        if verify_user_credentials(useremail, password):
+        from login import check_user_credentials
+        if check_user_credentials(useremail, password):
             tok = token_hex(16)
             SESSIONS[tok] = useremail
             resp = JSONResponse({"next": next})
@@ -265,8 +271,8 @@ def start_app(app_block, CONCURRENT_COUNT, AUTHENTICATION, PORT, SSL_KEYFILE, SS
             qp = request.query_params
             u, t = qp.get("useremail"), qp.get("token")
             if u and t:
-                from backend_auth import verify_user_token
-                if verify_user_token(u, t, qp.get("role")):
+                from login import verify_token
+                if verify_token(u, t, qp.get("role")):
                     tok = token_hex(16)
                     SESSIONS[tok] = u
                     url = str(request.url).split("?",1)[0]
