@@ -2,7 +2,7 @@
     "host": "127.0.0.1",
     "port": 3306,
     "user": "root",
-    "password": "BITZZCnmsl2201?",
-    "database": "se_db_new",
+    "password": "20040202",
+    "database": "se_db",
     "charset": "utf8mb4"
 }

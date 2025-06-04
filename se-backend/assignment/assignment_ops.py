@@ -2,10 +2,11 @@ import datetime
 import os
 from flask import jsonify, g, request, current_app
 
+from .grading_script import process_grading_task
 from login.auth import student_required, teacher_required
 from login.db import get_db_connection
 from .utils import ensure_dir, get_course_str_id, parse_course_id, normalize_course_id
-
+import json
 
 @teacher_required
 def create_assignment_api(course_id):
@@ -418,7 +419,6 @@ def teacher_assignment_summary_api():
     finally:
         conn.close()
 
-
 @teacher_required
 def auto_grade_assignment_api():
     """POST /api/teacher/assignment/auto-grade
@@ -426,58 +426,68 @@ def auto_grade_assignment_api():
     简易示例：把所有未评分记录打 100 分
     返回: {graded:int, skipped:int}
     """
+
     body = request.get_json(silent=True) or {}
     course_id = body.get("course_id")
     assign_no = body.get("assign_no")
 
     if not course_id or assign_no is None:
         return jsonify({"message": "参数缺失"}), 400
+
     try:
         assign_no = int(assign_no)
     except ValueError:
         return jsonify({"message": "assign_no 必须为整数"}), 400
 
-    norm_cid   = normalize_course_id(course_id)
-    teacher_em = g.user["email"]
-
-    conn = get_db_connection()
-    graded  = 0
+    graded = 0
     skipped = 0
-    try:
-        with conn.cursor() as cur:
-            # 权限校验
-            cur.execute("SELECT teacher_email FROM course WHERE course_id=%s", (course_id,))
-            row = cur.fetchone()
-            if not row:
-                return jsonify({"message": "课程不存在"}), 404
-            if row["teacher_email"] != teacher_em:
-                return jsonify({"message": "无权限"}), 403
 
-            assignment_table = f"{norm_cid}_hw_{assign_no}"
+    # 构建作业答案目录路径
+    # 当前 assignment.py 所在目录
+    current_dir = os.path.dirname(__file__)
 
-            # 查询未评分记录
+    # 上级目录，即 se-backend/
+    project_root = os.path.abspath(os.path.join(current_dir, ".."))
+
+    # 构建目标文件路径：courses/data/<course_id>/homework/<assign_no>/answer.txt
+    base_dir = os.path.join(
+        project_root, "courses", "data", course_id, "homework", str(assign_no)
+    )
+
+    homework_dir = course_id+"/"+"homework"+"/"+str(assign_no)
+
+    # 确保目录存在
+    if not os.path.isdir(base_dir):
+        return jsonify({"message": "作业目录不存在"}), 404
+
+    graded = 0
+    skipped = 0
+
+    # 遍历该目录下的所有 txt 文件，忽略 answer.txt 和 question.txt
+    for fname in os.listdir(base_dir):
+        if not fname.endswith(".txt"):
+            continue
+        if fname in ["answer.txt", "question.txt"]:
+            continue
+
+        student_path = os.path.join(base_dir, fname)
+
+        # 假设评分信息为：生成 fname+".score.json"
+        score_path = student_path.replace(".txt", ".score.json")
+
+        # 如果已评分则跳过
+        if os.path.exists(score_path):
             try:
-                cur.execute(f"SELECT studentemail FROM `{assignment_table}` WHERE score IS NULL")
-                pending = [r["studentemail"] for r in cur.fetchall()]
-            except Exception as e:
-                return jsonify({"message": f"作业表不存在或查询失败: {e}"}), 500
+                with open(score_path, "r", encoding="utf-8") as f:
+                    score_data = json.load(f)
+                if "score" in score_data:
+                    skipped += 1
+                    continue
+            except:
+                pass
 
-            if not pending:
-                return jsonify({"graded": 0, "skipped": 0}), 200
+        # 写入评分
+        process_grading_task(homework_dir)
 
-            # 简易批改逻辑：全部记 100 分
-            for email in pending:
-                cur.execute(
-                    f"UPDATE `{assignment_table}` "
-                    "SET score=%s, comment=%s WHERE studentemail=%s",
-                    (100, "已自动评分", email),
-                )
-                graded += 1
+    return jsonify({"graded": graded, "skipped": skipped}), 200
 
-        conn.commit()
-        return jsonify({"graded": graded, "skipped": skipped}), 200
-    except Exception as e:
-        conn.rollback()
-        return jsonify({"message": f"批改失败: {e}"}), 500
-    finally:
-        conn.close()
