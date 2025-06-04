@@ -5,7 +5,7 @@ from flask import jsonify, g, request, current_app
 from login.auth import student_required, teacher_required
 from login.db import get_db_connection
 from .utils import ensure_dir, get_course_str_id, parse_course_id, normalize_course_id
-
+from .ai_grader import grade_assignment_with_ai, read_file_content
 
 @teacher_required
 def create_assignment_api(course_id):
@@ -423,7 +423,7 @@ def teacher_assignment_summary_api():
 def auto_grade_assignment_api():
     """POST /api/teacher/assignment/auto-grade
     Body: {role,useremail,token,course_id,assign_no}
-    简易示例：把所有未评分记录打 100 分
+    使用大模型智能批改作业
     返回: {graded:int, skipped:int}
     """
     body = request.get_json(silent=True) or {}
@@ -437,12 +437,18 @@ def auto_grade_assignment_api():
     except ValueError:
         return jsonify({"message": "assign_no 必须为整数"}), 400
 
-    norm_cid   = normalize_course_id(course_id)
+    # 正确处理course_id格式
+    norm_cid = normalize_course_id(course_id)
     teacher_em = g.user["email"]
 
+    # 调试信息
+    print(f"原始course_id: {course_id}")
+    print(f"规范化后的norm_cid: {norm_cid}")
+
     conn = get_db_connection()
-    graded  = 0
+    graded = 0
     skipped = 0
+    
     try:
         with conn.cursor() as cur:
             # 权限校验
@@ -453,31 +459,126 @@ def auto_grade_assignment_api():
             if row["teacher_email"] != teacher_em:
                 return jsonify({"message": "无权限"}), 403
 
-            assignment_table = f"{norm_cid}_hw_{assign_no}"
+            # 构建文件路径
+            backend_dir = os.path.dirname(os.path.dirname(__file__))
+            base_dir = os.path.join(backend_dir, "courses", "data", norm_cid, "homework", str(assign_no))
+            answer_file = os.path.join(base_dir, "answer.txt")
+            
+            print(f"backend_dir: {backend_dir}")
+            print(f"base_dir: {base_dir}")
+            print(f"查找标准答案文件: {answer_file}")
+            print(f"目录是否存在: {os.path.exists(base_dir)}")
+            print(f"答案文件是否存在: {os.path.exists(answer_file)}")
+            
+            # 确保目录存在
+            os.makedirs(base_dir, exist_ok=True)
+            
+            # 读取标准答案
+            standard_answer = read_file_content(answer_file)
+            if not standard_answer:
+                return jsonify({
+                    "message": f"标准答案文件不存在或读取失败",
+                    "expected_path": answer_file,
+                    "suggestion": "请在指定路径创建answer.txt文件"
+                }), 500
 
-            # 查询未评分记录
-            try:
-                cur.execute(f"SELECT studentemail FROM `{assignment_table}` WHERE score IS NULL")
-                pending = [r["studentemail"] for r in cur.fetchall()]
-            except Exception as e:
-                return jsonify({"message": f"作业表不存在或查询失败: {e}"}), 500
+            # 修复：查询homework表中的未评分记录
+            cur.execute(
+                "SELECT student_email FROM homework WHERE course_id=%s AND assign_no=%s AND score IS NULL",
+                (course_id, assign_no)
+            )
+            pending_students = [r["student_email"] for r in cur.fetchall()]
 
-            if not pending:
-                return jsonify({"graded": 0, "skipped": 0}), 200
-
-            # 简易批改逻辑：全部记 100 分
-            for email in pending:
+            if not pending_students:
+                # 如果没有未评分记录，检查是否有学生需要创建记录
                 cur.execute(
-                    f"UPDATE `{assignment_table}` "
-                    "SET score=%s, comment=%s WHERE studentemail=%s",
-                    (100, "已自动评分", email),
+                    "SELECT useremail FROM student_course WHERE course_id=%s",
+                    (course_id,)
                 )
-                graded += 1
+                all_students = [r["useremail"] for r in cur.fetchall()]
+                
+                # 为没有提交记录的学生创建记录（表示未提交，score=NULL）
+                for student_email in all_students:
+                    cur.execute(
+                        "SELECT 1 FROM homework WHERE course_id=%s AND assign_no=%s AND student_email=%s",
+                        (course_id, assign_no, student_email)
+                    )
+                    if not cur.fetchone():
+                        # 创建未提交记录
+                        cur.execute(
+                            "INSERT INTO homework (course_id, assign_no, student_email, score, comment) VALUES (%s, %s, %s, NULL, '未提交')",
+                            (course_id, assign_no, student_email)
+                        )
+                
+                # 重新查询待评分学生（只批改有作业文件的学生）
+                cur.execute(
+                    "SELECT student_email FROM homework WHERE course_id=%s AND assign_no=%s AND score IS NULL",
+                    (course_id, assign_no)
+                )
+                pending_students = [r["student_email"] for r in cur.fetchall()]
+
+            if not pending_students:
+                return jsonify({"graded": 0, "skipped": 0, "message": "没有待评分的作业"}), 200
+
+            print(f"找到 {len(pending_students)} 个待评分学生: {pending_students}")
+
+            # 批改每个学生的作业
+            for student_email in pending_students:
+                try:
+                    # 构建学生作业文件路径
+                    student_filename = f"{student_email.replace('@', '_').replace('.', '_')}.txt"
+                    student_file = os.path.join(base_dir, student_filename)
+                    
+                    print(f"查找学生作业文件: {student_file}")
+                    
+                    # 读取学生答案
+                    student_answer = read_file_content(student_file)
+                    
+                    if not student_answer:
+                        print(f"学生作业文件不存在或读取失败: {student_file}")
+                        # 标记为未提交但仍保留在数据库中
+                        cur.execute(
+                            "UPDATE homework SET score=0, comment='未提交作业' WHERE course_id=%s AND assign_no=%s AND student_email=%s",
+                            (course_id, assign_no, student_email)
+                        )
+                        skipped += 1
+                        continue
+                    
+                    # 使用AI进行批改
+                    print(f"正在为学生 {student_email} 进行AI评分...")
+                    score, comment = grade_assignment_with_ai(student_answer, standard_answer)
+                    
+                    # 修复：更新homework表，确保字段名正确
+                    cur.execute(
+                        "UPDATE homework SET score=%s, comment=%s WHERE course_id=%s AND assign_no=%s AND student_email=%s",
+                        (score, comment, course_id, assign_no, student_email)
+                    )
+                    
+                    # 检查更新是否成功
+                    if cur.rowcount > 0:
+                        graded += 1
+                        print(f"已评分学生 {student_email}: {score}分，评语: {comment[:50]}...")
+                    else:
+                        print(f"更新失败，学生 {student_email} 的记录可能不存在")
+                        skipped += 1
+                    
+                except Exception as e:
+                    print(f"批改学生 {student_email} 作业时出错: {e}")
+                    skipped += 1
+                    continue
 
         conn.commit()
-        return jsonify({"graded": graded, "skipped": skipped}), 200
+        print(f"批改完成！成功: {graded}, 跳过: {skipped}")
+        
+        return jsonify({
+            "graded": graded, 
+            "skipped": skipped,
+            "message": f"智能批改完成！成功批改 {graded} 份作业，跳过 {skipped} 份"
+        }), 200
+        
     except Exception as e:
         conn.rollback()
-        return jsonify({"message": f"批改失败: {e}"}), 500
+        print(f"批改过程中发生错误: {e}")
+        return jsonify({"message": f"批改失败: {str(e)}"}), 500
     finally:
         conn.close()

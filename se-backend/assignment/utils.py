@@ -15,9 +15,17 @@ def get_course_str_id(numeric_id):
     return f"course_{numeric_id}"
 
 
-def normalize_course_id(cid: str) -> str:
-    """始终返回带前缀的 course_xxx 形式"""
-    return cid if cid.startswith("course_") else f"course_{cid}"
+def normalize_course_id(course_id):
+    """
+    规范化课程ID，确保格式一致
+    例如: "rg_01" -> "rg_01", "course_rg_01" -> "rg_01"
+    """
+    if isinstance(course_id, str):
+        # 如果包含 "course_" 前缀，去掉它
+        if course_id.startswith("course_"):
+            return course_id.replace("course_", "")
+        return course_id.strip()
+    return str(course_id)
 
 
 def parse_course_id(course_id):
