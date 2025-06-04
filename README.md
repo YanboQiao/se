@@ -21,8 +21,3 @@ GPT Academic listens on port **8001** and exposes its UI under the
 `/llms` path. The Vue frontend proxies this path so you can access the
 assistant through `http://localhost:5173/llms` while keeping the main
 frontend available at the root.
-
-The academic assistant now reuses the same account system as the
-backend. Use the credentials you registered through the backend API to
-log in when accessing `/llms`. A simple login screen will appear when you
-open the assistant; enter your existing account details there.
