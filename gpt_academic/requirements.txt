@@ -29,6 +29,8 @@ edge-tts>=7.0.0
 pymupdf
 openai
 rjsmin
+PyMySQL>=1.0.2
+loguru
 loguru
 arxiv
 numpy

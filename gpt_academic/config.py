@@ -201,6 +201,12 @@ AZURE_ENGINE = "填入你亲手写的部署名"  # 读 docs\use_azure.md
 # 如果需要使用AZURE（方法二：多个azure模型部署+动态切换）详情请见额外文档 docs\use_azure.md
 AZURE_CFG_ARRAY = {}
 
+# 用户登录认证系统配置
+# 启用后将要求用户登录才能使用GPT Academic，与SE Backend共享用户数据库
+ENABLE_LOGIN = True  # 是否启用登录功能
+LOGIN_REQUIRE_VERIFICATION = True  # 是否需要验证用户身份
+LOGIN_ALLOWED_ROLES = ["student", "teacher"]  # 允许登录的用户角色
+
 # 阿里云实时语音识别 配置难度较高
 # 参考 https://github.com/binary-husky/gpt_academic/blob/master/docs/use_audio.md
 ENABLE_AUDIO = False

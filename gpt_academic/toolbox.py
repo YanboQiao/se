@@ -1,4 +1,3 @@
-
 import importlib
 import time
 import inspect
@@ -1055,3 +1054,18 @@ def log_chat(llm_model: str, input_str: str, output_str: str):
             """).format(uid=uid, llm_model=llm_model, input_str=input_str, output_str=output_str))
     except:
         logger.error(trimmed_format_exc())
+
+def get_current_version():
+    """
+    获取当前的版本号。
+
+    Returns:
+        str: 当前的版本号。如果无法获取版本号，则返回空字符串。
+    """
+    import json
+    try:
+        with open('./version', 'r', encoding='utf8') as f:
+            current_version = json.loads(f.read())['version']  # ⭐ 从读取的json数据中提取版本号
+    except:
+        current_version = ""
+    return current_version

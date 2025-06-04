@@ -58,7 +58,15 @@ def main():
     from themes.theme import adjust_theme, advanced_css, theme_declaration, js_code_clear, js_code_show_or_hide
     from themes.theme import js_code_for_toggle_darkmode
     from themes.theme import load_dynamic_theme, to_cookie_str, from_cookie_str, assign_user_uuid
-    title_html = f"<h1 align=\"center\">软工智能助手 {get_current_version()}</h1>{theme_declaration}"
+    
+    # 检查是否在认证模式下运行
+    authenticated_user_info = os.environ.get('AUTHENTICATED_USER', '')
+    if authenticated_user_info:
+        username, role, email = authenticated_user_info.split('|')
+        user_display = f'👤 <span style="color: #28a745;">{username}</span> ({role})'
+        title_html = f"<h1 align=\"center\">软工智能助手 {get_current_version()}</h1>{theme_declaration}<div align=\"center\" style=\"margin: 10px; padding: 10px; background: rgba(40, 167, 69, 0.1); border-radius: 5px;\">已登录用户: {user_display}</div>"
+    else:
+        title_html = f"<h1 align=\"center\">软工智能助手 {get_current_version()}</h1>{theme_declaration}"
 
 
     # 一些普通功能模块
@@ -333,11 +341,11 @@ def main():
     def run_delayed_tasks():
         import threading, webbrowser, time
         logger.info(f"如果浏览器没有自动打开，请复制并转到以下URL：")
-        if DARK_MODE:   logger.info(f"\t「暗色主题已启用（支持动态切换主题）」: http://localhost:{PORT}")
+        if DARK_MODE:   logger.info(f"\t「暗色主题已启用（支持动态切换主题）」: http://localhost:{PORT}/llms")
         else:           logger.info(f"\t「亮色主题已启用（支持动态切换主题）」: http://localhost:{PORT}")
 
         def auto_updates(): time.sleep(0); auto_update()
-        def open_browser(): time.sleep(2); webbrowser.open_new_tab(f"http://localhost:{PORT}")
+        def open_browser(): time.sleep(2); webbrowser.open_new_tab(f"http://localhost:{PORT}/llms")
         def warm_up_mods(): time.sleep(6); warm_up_modules()
 
         threading.Thread(target=auto_updates, name="self-upgrade", daemon=True).start() # 查看自动更新
