@@ -10,18 +10,18 @@ import json
 
 
 @teacher_required
-def create_assignment_api(course_id):
-    """教师在课程中布置新作业
-
-    Args:
-        course_id: 课程ID，可以是"course_X"格式或纯数字
+def create_assignment_api():
+    """教师创建新作业
 
     请求体格式:
     {
+        "course_id": "rg_01",
         "title": "作业标题",
         "description": "作业描述",
         "dueDate": "2025-06-30",  # 可选，YYYY-MM-DD格式
-        "referenceAnswer": "参考答案"  # 可选
+        "referenceAnswer": "参考答案",  # 可选
+        "useremail": "teacher@example.com",
+        "token": "auth_token"
     }
 
     Returns:
@@ -32,14 +32,20 @@ def create_assignment_api(course_id):
     data = request.get_json(silent=True) or {}
 
     # 1. 获取并验证请求参数
+    course_id = data.get("course_id")
     title = data.get("title")
     description = data.get("description", "")
+    question = data.get("question", "")
     due_date_str = data.get("dueDate")
     reference_answer = data.get("referenceAnswer", "")
 
     # 验证必填字段
+    if not course_id:
+        return jsonify({"message": "课程ID不能为空"}), 400
     if not title or not title.strip():
         return jsonify({"message": "标题不能为空"}), 400
+    if not question or not question.strip():
+        return jsonify({"message": "作业内容不能为空"}), 400
 
     # 2. 解析课程ID - 支持字符串格式
     clean_course_id = course_id
@@ -66,14 +72,20 @@ def create_assignment_api(course_id):
             due_date = None
             if due_date_str:
                 try:
-                    due_date = datetime.datetime.strptime(due_date_str, "%Y-%m-%d")
-                except:
-                    return jsonify({"message": "日期格式无效，请使用YYYY-MM-DD格式"}), 400
+                    # 支持多种日期格式
+                    if 'T' in due_date_str:
+                        # datetime-local格式: "2025-06-30T23:59"
+                        due_date = datetime.datetime.strptime(due_date_str, "%Y-%m-%dT%H:%M")
+                    else:
+                        # 纯日期格式: "2025-06-30"
+                        due_date = datetime.datetime.strptime(due_date_str, "%Y-%m-%d")
+                except Exception as e:
+                    return jsonify({"message": f"日期格式无效: {str(e)}，请使用YYYY-MM-DD或YYYY-MM-DDTHH:MM格式"}), 400
 
-            # 6. 插入作业记录
+            # 6. 插入作业记录（只存储基本信息，不包含reference_answer字段）
             cur.execute(
-                "INSERT INTO assignment (course_id, assign_no, title, description, due_date, reference_answer) VALUES (%s,%s,%s,%s,%s,%s)",
-                (clean_course_id, next_no, title, description, due_date, reference_answer)
+                "INSERT INTO assignment (course_id, assign_no, title, description, due_date) VALUES (%s,%s,%s,%s,%s)",
+                (clean_course_id, next_no, title, description, due_date)
             )
 
             # 注意：不需要创建单独的作业表，系统使用统一的 homework 表存储所有评分数据
@@ -81,25 +93,23 @@ def create_assignment_api(course_id):
             # 8. 提交事务
             conn.commit()
 
-            # 9. 创建作业文件存储目录
-            base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
-            course_folder = os.path.join(base_dir, f"course_{clean_course_id}")
-            ensure_dir(course_folder)
-            ensure_dir(os.path.join(course_folder, "assignments"))
-            asm_folder = os.path.join(course_folder, "assignments", f"assignment_{next_no}")
-            ensure_dir(asm_folder)
+            # 9. 创建作业文件存储目录（按照新的路径结构）
+            base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "courses", "data")
+            course_folder = os.path.join(base_dir, clean_course_id)
+            homework_folder = os.path.join(course_folder, "homework", str(next_no))
+            ensure_dir(homework_folder)
 
-            # 10. 保存作业说明和参考答案文件
-            if description:
+            # 10. 保存作业题目和参考答案为独立的txt文件
+            if question:
                 try:
-                    with open(os.path.join(asm_folder, "description.txt"), "w", encoding="utf-8") as f:
-                        f.write(description)
+                    with open(os.path.join(homework_folder, "question.txt"), "w", encoding="utf-8") as f:
+                        f.write(question)
                 except Exception as e:
-                    current_app.logger.error(f"保存作业描述文件失败: {e}")
+                    current_app.logger.error(f"保存作业题目文件失败: {e}")
 
             if reference_answer:
                 try:
-                    with open(os.path.join(asm_folder, "reference_answer.txt"), "w", encoding="utf-8") as f:
+                    with open(os.path.join(homework_folder, "answer.txt"), "w", encoding="utf-8") as f:
                         f.write(reference_answer)
                 except Exception as e:
                     current_app.logger.error(f"保存参考答案文件失败: {e}")
@@ -126,15 +136,32 @@ def create_assignment_api(course_id):
 
 
 @student_required
-def get_student_assignment_api(assignment_id):
-    """学生获取作业详情和自己的提交"""
+def get_student_assignment_api():
+    """学生获取作业详情和自己的提交
+    
+    请求体格式:
+    {
+        "course_id": "rg_01" 或数字,
+        "assign_no": 1
+    }
+    """
     student_email = g.user["email"]
-    if "_hw_" not in assignment_id:
-        return jsonify({"message": "作业ID无效"}), 400
-    course_part, assign_no_part = assignment_id.split("_hw_", 1)
-    if not assign_no_part.isdigit():
-        return jsonify({"message": "作业ID无效"}), 400
-    assign_no = int(assign_no_part)
+    data = request.get_json(silent=True) or {}
+    
+    course_id = data.get("course_id")
+    assign_no = data.get("assign_no")
+    
+    if not course_id or assign_no is None:
+        return jsonify({"message": "缺少必要参数 course_id 或 assign_no"}), 400
+    
+    # 解析课程ID
+    if isinstance(course_id, str):
+        parsed_id = parse_course_id(course_id)
+    else:
+        parsed_id = str(course_id)
+        
+    if parsed_id is None:
+        return jsonify({"message": "课程ID无效"}), 400
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -144,13 +171,13 @@ def get_student_assignment_api(assignment_id):
                         FROM student_course
                         WHERE useremail = %s
                           AND course_id = %s
-                        """, (student_email, course_part))
+                        """, (student_email, parsed_id))
             if not cur.fetchone():
                 return jsonify({"message": "无权访问该作业"}), 403
 
             # 查询作业基本信息
             cur.execute("SELECT title, description, due_date FROM assignment WHERE course_id=%s AND assign_no=%s",
-                        (course_part, assign_no))
+                        (parsed_id, assign_no))
             meta = cur.fetchone()
             if not meta:
                 return jsonify({"message": "作业不存在"}), 404
@@ -163,7 +190,7 @@ def get_student_assignment_api(assignment_id):
             try:
                 cur.execute(
                     "SELECT content, score, comment, submit_time FROM homework WHERE course_id=%s AND assign_no=%s AND student_email=%s",
-                    (course_part, assign_no, student_email))
+                    (parsed_id, assign_no, student_email))
                 sub = cur.fetchone()
             except Exception:
                 sub = None
@@ -182,32 +209,44 @@ def get_student_assignment_api(assignment_id):
 
 
 @teacher_required
-def get_teacher_assignment_api(assignment_id):
-    """教师获取作业详情和所有学生提交情况"""
+def get_teacher_assignment_api():
+    """教师获取作业详情和所有学生提交情况
+    
+    请求体格式:
+    {
+        "course_id": "rg_01" 或数字,
+        "assign_no": 1
+    }
+    """
     teacher_email = g.user["email"]
-    if "_hw_" not in assignment_id:
-        return jsonify({"message": "作业ID无效"}), 400
-    course_part, assign_no_part = assignment_id.split("_hw_", 1)
-    if not assign_no_part.isdigit():
-        return jsonify({"message": "作业ID无效"}), 400
-    assign_no = int(assign_no_part)
-
-    # 解析课程ID
-    num_id = parse_course_id(course_part)
-    if num_id is None:
-        return jsonify({"message": "作业ID无效"}), 400
+    data = request.get_json(silent=True) or {}
+    
+    course_id = data.get("course_id")
+    assign_no = data.get("assign_no")
+    
+    if not course_id or assign_no is None:
+        return jsonify({"message": "缺少必要参数 course_id 或 assign_no"}), 400
+    
+    # 解析课程ID - 数据库中的course_id是字符串
+    if isinstance(course_id, str):
+        parsed_id = parse_course_id(course_id)
+    else:
+        parsed_id = str(course_id)
+        
+    if parsed_id is None:
+        return jsonify({"message": "课程ID无效"}), 400
 
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT teacher_email FROM course WHERE course_id=%s", (num_id,))
+            cur.execute("SELECT teacher_email FROM course WHERE course_id=%s", (parsed_id,))
             c = cur.fetchone()
             if not c:
                 return jsonify({"message": "课程不存在"}), 404
             if c["teacher_email"] != teacher_email:
                 return jsonify({"message": "无权限访问该作业"}), 403
             cur.execute("SELECT title, description, due_date FROM assignment WHERE course_id=%s AND assign_no=%s",
-                        (num_id, assign_no))
+                        (parsed_id, assign_no))
             meta = cur.fetchone()
             if not meta:
                 return jsonify({"message": "作业不存在"}), 404
@@ -216,72 +255,137 @@ def get_teacher_assignment_api(assignment_id):
                 "description": meta["description"] or "",
                 "dueDate": meta["due_date"].strftime("%Y-%m-%d") if meta["due_date"] else None
             }
-            # 查询所有学生提交（使用统一的homework表）
-            submissions_list = []
+            # 获取课程中的所有学生
+            cur.execute("""
+                SELECT s.useremail, s.username 
+                FROM student s 
+                JOIN student_course sc ON s.useremail = sc.useremail 
+                WHERE sc.course_id = %s
+            """, (parsed_id,))
+            all_students = cur.fetchall()
+            
+            # 获取作业评分信息（从homework表）
+            homework_grades = {}
             try:
-                cur.execute("SELECT student_email, content, score, comment FROM homework WHERE course_id=%s AND assign_no=%s", (num_id, assign_no))
-                subs = cur.fetchall()
+                cur.execute("SELECT student_email, score, comment FROM homework WHERE course_id=%s AND assign_no=%s", (parsed_id, assign_no))
+                for row in cur.fetchall():
+                    homework_grades[row["student_email"]] = {
+                        "score": row["score"],
+                        "comment": row["comment"] or ""
+                    }
             except Exception:
-                subs = []
-            # 获取学生姓名
-            emails = [row["student_email"] for row in subs] if subs else []
-            names_map = {}
-            if emails:
-                format_str = ','.join(['%s'] * len(emails))
-                cur.execute(f"SELECT useremail, username FROM student WHERE useremail IN ({format_str})", tuple(emails))
-                for nr in cur.fetchall():
-                    names_map[nr["useremail"]] = nr["username"]
-            for row in subs:
-                content_val = row["content"]
-                if content_val and isinstance(content_val, str) and content_val.startswith("f_"):
-                    content_val = request.host_url.strip('/') + f"/api/v1/files/{content_val}"
-                submissions_list.append({
-                    "studentEmail": row["student_email"],
-                    "studentName": names_map.get(row["student_email"]),
-                    "content": content_val,
-                    "score": row["score"],
-                    "feedback": row["comment"] or ""
-                })
+                pass
+            
+            # 检查文件系统中的提交
+            base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "courses", "data")
+            homework_dir = os.path.join(base_dir, parsed_id, "homework", str(assign_no))
+            
+            submissions_list = []
+            for student in all_students:
+                student_email = student["useremail"]
+                student_name = student["username"]
+                
+                # 构建文件名（邮箱格式转换）
+                # 例如: qiaoyanbo408@gmail.com -> qiaoyanbo408_gmail_com.txt
+                filename = student_email.replace('@', '_').replace('.', '_') + '.txt'
+                file_path = os.path.join(homework_dir, filename)
+                
+                # 检查是否有提交文件
+                content = None
+                has_submission = False
+                if os.path.exists(file_path):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content = f.read().strip()
+                        has_submission = True
+                    except Exception as e:
+                        current_app.logger.error(f"读取作业文件失败 {file_path}: {e}")
+                        content = "文件读取失败"
+                
+                # 如果有提交或者有评分记录，就加入到列表中
+                grade_info = homework_grades.get(student_email, {"score": None, "comment": ""})
+                if has_submission or grade_info["score"] is not None:
+                    # 限制内容预览长度
+                    content_preview = content[:10] + "..." if content and len(content) > 10 else content or ""
+                    
+                    submissions_list.append({
+                        "studentEmail": student_email,
+                        "studentName": student_name,
+                        "content": content or "",  # 完整内容，用于评分弹窗
+                        "contentPreview": content_preview,  # 预览内容，用于卡片显示
+                        "score": grade_info["score"],
+                        "feedback": grade_info["comment"],
+                        "hasSubmission": has_submission,
+                        "gradingStatus": "已评分" if grade_info["score"] is not None else ("已提交" if has_submission else "未提交")
+                    })
             return jsonify({"assignment": assignment_info, "submissions": submissions_list}), 200
     finally:
         conn.close()
 
 
 @teacher_required
-def grade_submission_api(assignment_id):
-    """教师提交学生作业评分"""
+def grade_submission_api():
+    """教师提交学生作业评分
+    
+    请求体格式:
+    {
+        "course_id": "rg_01" 或数字,
+        "assign_no": 1,
+        "studentEmail": "student@example.com",
+        "score": 85,
+        "feedback": "做得很好"
+    }
+    """
     teacher_email = g.user["email"]
     data = request.get_json(silent=True) or {}
+    
+    course_id = data.get("course_id")
+    assign_no = data.get("assign_no")
     student_email = data.get("studentEmail")
     score = data.get("score")
     feedback = data.get("feedback", "")
-    if not student_email or score is None:
+    
+    if not course_id or assign_no is None or not student_email or score is None:
         return jsonify({"message": "参数不完整"}), 400
-    if "_hw_" not in assignment_id:
-        return jsonify({"message": "作业ID无效"}), 400
-    course_part, assign_no_part = assignment_id.split("_hw_", 1)
-    num_id = parse_course_id(course_part)
-    if num_id is None or not assign_no_part.isdigit():
-        return jsonify({"message": "作业ID无效"}), 400
-    assign_no = int(assign_no_part)
+    
+    # 解析课程ID
+    if isinstance(course_id, str):
+        parsed_id = parse_course_id(course_id)
+    else:
+        parsed_id = str(course_id)
+        
+    if parsed_id is None:
+        return jsonify({"message": "课程ID无效"}), 400
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT teacher_email FROM course WHERE course_id=%s", (num_id,))
+            cur.execute("SELECT teacher_email FROM course WHERE course_id=%s", (parsed_id,))
             c = cur.fetchone()
             if not c or c["teacher_email"] != teacher_email:
                 return jsonify({"message": "无权限"}), 403
             # 验证学生是否在课程中（使用student_course表）
             try:
-                cur.execute("SELECT 1 FROM student_course WHERE useremail=%s AND course_id=%s", (student_email, num_id))
+                cur.execute("SELECT 1 FROM student_course WHERE useremail=%s AND course_id=%s", (student_email, parsed_id))
                 if not cur.fetchone():
                     return jsonify({"message": "学生不在该课程中"}), 404
             except Exception:
                 return jsonify({"message": "学生不在该课程中"}), 404
             
-            # 更新homework表中的评分
-            cur.execute("UPDATE homework SET score=%s, comment=%s WHERE course_id=%s AND assign_no=%s AND student_email=%s",
-                        (score, feedback, num_id, assign_no, student_email))
+            # 检查homework表中是否已有记录
+            cur.execute("SELECT 1 FROM homework WHERE course_id=%s AND assign_no=%s AND student_email=%s",
+                        (parsed_id, assign_no, student_email))
+            exists = cur.fetchone()
+            
+            if exists:
+                # 更新现有记录
+                cur.execute("UPDATE homework SET score=%s, comment=%s WHERE course_id=%s AND assign_no=%s AND student_email=%s",
+                            (score, feedback, parsed_id, assign_no, student_email))
+            else:
+                # 插入新记录（学生提交了作业但数据库中没有记录）
+                cur.execute(
+                    "INSERT INTO homework (course_id, assign_no, student_email, score, comment) VALUES (%s,%s,%s,%s,%s)",
+                    (parsed_id, assign_no, student_email, score, feedback)
+                )
         conn.commit()
         return jsonify({"message": "评分已保存", "status": "success"}), 200
     except Exception as e:
@@ -292,20 +396,34 @@ def grade_submission_api(assignment_id):
 
 
 @student_required
-def submit_assignment_api(assignment_id):
-    """学生提交作业接口"""
+def submit_assignment_api():
+    """学生提交作业接口
+    
+    请求体格式:
+    {
+        "course_id": "rg_01" 或数字,
+        "assign_no": 1,
+        "content": "作业内容"
+    }
+    """
     student_email = g.user["email"]
     data = request.get_json(silent=True) or {}
+    
+    course_id = data.get("course_id")
+    assign_no = data.get("assign_no")
     content = data.get("content")
-    if content is None:
-        return jsonify({"message": "没有提交内容"}), 400
-    if "_hw_" not in assignment_id:
-        return jsonify({"message": "作业ID无效"}), 400
-    course_part, assign_no_part = assignment_id.split("_hw_", 1)
-    num_id = parse_course_id(course_part)
-    if num_id is None or not assign_no_part.isdigit():
-        return jsonify({"message": "作业ID无效"}), 400
-    assign_no = int(assign_no_part)
+    
+    if not course_id or assign_no is None or content is None:
+        return jsonify({"message": "缺少必要参数"}), 400
+    
+    # 解析课程ID
+    if isinstance(course_id, str):
+        parsed_id = parse_course_id(course_id)
+    else:
+        parsed_id = str(course_id)
+        
+    if parsed_id is None:
+        return jsonify({"message": "课程ID无效"}), 400
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -315,35 +433,46 @@ def submit_assignment_api(assignment_id):
                         FROM student_course
                         WHERE useremail = %s
                           AND course_id = %s
-                        """, (student_email, course_part))
+                        """, (student_email, parsed_id))
             if not cur.fetchone():
                 return jsonify({"message": "无权提交此作业"}), 403
 
-            # 检查是否已经提交过（使用homework表）
-            cur.execute("SELECT 1 FROM homework WHERE course_id=%s AND assign_no=%s AND student_email=%s", (num_id, assign_no, student_email))
-            if cur.fetchone():
+            # 检查是否已经提交过（通过文件系统检查）
+            base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "courses", "data")
+            homework_dir = os.path.join(base_dir, parsed_id, "homework", str(assign_no))
+            ensure_dir(homework_dir)
+            
+            # 构建学生作业文件名
+            filename = student_email.replace('@', '_').replace('.', '_') + '.txt'
+            file_path = os.path.join(homework_dir, filename)
+            
+            # 检查是否已经提交过
+            if os.path.exists(file_path):
                 return jsonify({"message": "请勿重复提交"}), 400
+            
+            # 保存作业内容到文件系统
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            except Exception as e:
+                return jsonify({"message": f"保存作业失败: {e}"}), 500
+            
             # 如果提交附件，已通过 /uploadfile 接口上传文件，文件标识在 content
             if isinstance(content, str) and content.startswith("f_"):
                 file_id = content
-                base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
                 upload_dir = os.path.join(base_dir, "uploads")
                 found_file = next((name for name in os.listdir(upload_dir) if name.startswith(file_id)), None)
                 if found_file:
                     file_ext = found_file.split('.', 1)[1] if '.' in found_file else ""
-                    asm_folder = os.path.join(base_dir, get_course_str_id(num_id), "homeworkList", f"hm{assign_no}")
-                    ensure_dir(asm_folder)
                     dest_name = student_email.replace('@', '_').replace('.', '_') + ('.' + file_ext if file_ext else '')
                     try:
                         import shutil
-                        shutil.copy(os.path.join(upload_dir, found_file), os.path.join(asm_folder, dest_name))
+                        shutil.copy(os.path.join(upload_dir, found_file), os.path.join(homework_dir, dest_name))
                     except Exception as e:
                         current_app.logger.error(f"Failed to copy file to assignment folder: {e}")
+            
             now = datetime.datetime.now()
-            cur.execute(
-                "INSERT INTO homework (course_id, assign_no, student_email, content, score, comment, submit_time) VALUES (%s,%s,%s,%s,%s,%s,%s)",
-                (num_id, assign_no, student_email, content, None, "", now))
-        conn.commit()
+        conn.commit()  # 虽然没有数据库操作，但保持事务一致性
         submission_info = {
             "content": content,
             "submitTime": now.strftime("%Y-%m-%d %H:%M:%S"),

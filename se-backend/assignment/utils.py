@@ -21,21 +21,9 @@ def normalize_course_id(cid: str) -> str:
 
 
 def parse_course_id(course_id):
-    """解析课程ID，支持多种格式"""
-    num_id = None
+    """解析课程ID，支持多种格式，返回原始课程ID字符串"""
+    # 如果是 course_xxx 格式，去掉前缀
     if course_id.startswith("course_"):
-        try:
-            num_id = int(course_id.split("course_")[1])
-        except:
-            num_id = None
-    elif "_" in course_id:
-        try:
-            num_id = int(course_id.split('_')[-1])
-        except:
-            num_id = None
-    else:
-        try:
-            num_id = int(course_id)
-        except:
-            num_id = None
-    return num_id
+        return course_id.split("course_")[1]
+    # 否则直接返回原始ID
+    return course_id

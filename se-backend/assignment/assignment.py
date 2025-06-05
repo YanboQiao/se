@@ -45,15 +45,15 @@ def init_app(app: Flask):
                      view_func=enroll_course_api, methods=["POST"])
     
     # 作业API
-    app.add_url_rule("/api/teacher/course/<course_id>/assignments", endpoint="create_assignment", 
+    app.add_url_rule("/api/teacher/assignment/create", endpoint="create_assignment", 
                      view_func=create_assignment_api, methods=["POST"])
-    app.add_url_rule("/api/student/assignment/<assignment_id>", endpoint="student_assignment_info", 
-                     view_func=get_student_assignment_api, methods=["GET"])
-    app.add_url_rule("/api/teacher/assignment/<assignment_id>", endpoint="teacher_assignment_info", 
-                     view_func=get_teacher_assignment_api, methods=["GET"])
-    app.add_url_rule("/api/teacher/assignment/<assignment_id>/grade", endpoint="grade_assignment", 
+    app.add_url_rule("/api/student/assignment/info", endpoint="student_assignment_info", 
+                     view_func=get_student_assignment_api, methods=["POST"])
+    app.add_url_rule("/api/teacher/assignment/info", endpoint="teacher_assignment_info", 
+                     view_func=get_teacher_assignment_api, methods=["POST"])
+    app.add_url_rule("/api/teacher/assignment/grade", endpoint="grade_assignment", 
                      view_func=grade_submission_api, methods=["POST"])
-    app.add_url_rule("/api/student/assignment/<assignment_id>/submit", endpoint="submit_assignment", 
+    app.add_url_rule("/api/student/assignment/submit", endpoint="submit_assignment", 
                      view_func=submit_assignment_api, methods=["POST"])
     
     # 作业统计和自动批改API
