@@ -5,7 +5,7 @@ main.py —— GPT-Academic + 登录 / 注册集成版
 后端认证接口： http://127.0.0.1:1010/api/login  /register
 """
 
-import os, sys, time, threading, webbrowser, requests, gradio as gr
+import os, sys, time, threading, webbrowser, requests, gradio as gr, copy
 from loguru import logger
 
 # ------------------------------------------------------------------- #
@@ -40,7 +40,6 @@ def register_api(email, name, pwd, role):
 #  插件信息编码函数（从main.py复制）
 # ------------------------------------------------------------------- #
 def encode_plugin_info(k, plugin)->str:
-    import copy
     from themes.theme import to_cookie_str
     plugin_ = copy.copy(plugin)
     plugin_.pop("Function", None)
@@ -346,18 +345,21 @@ def main() -> None:
                         with gr.Row():
                             with gr.Accordion("更多函数插件", open=True):
                                 dropdown_fn_list = []
-                                for name,plugin in plugins.items():
-                                    if match_group(plugin['Group'], DEFAULT_FN_GROUPS) and \
-                                       (not plugin.get("AsButton",True) or plugin.get("AdvancedArgs",False)):
-                                        dropdown_fn_list.append(name)
-                                dropdown = gr.Dropdown(dropdown_fn_list,
-                                                       value="点击这里输入「关键词」搜索插件",
-                                                       label="", show_label=False).style(container=False)
-                                plugin_advanced_arg = gr.Textbox(show_label=True, label="高级参数输入区",
-                                                                 visible=False, elem_id="advance_arg_input_legacy",
-                                                                 placeholder="这里是特殊函数插件的高级参数输入区").style(container=False)
-                                switchy_bt = gr.Button("请先从插件列表中选择", variant="secondary",
-                                                       elem_id="elem_switchy_bt").style(size="sm")
+                                for k, plugin in plugins.items():
+                                    if not match_group(plugin['Group'], DEFAULT_FN_GROUPS): continue
+                                    if not plugin.get("AsButton", True): dropdown_fn_list.append(k)     # 排除已经是按钮的插件
+                                    elif plugin.get('AdvancedArgs', False): dropdown_fn_list.append(k)  # 对于需要高级参数的插件，亦在下拉菜单中显示
+                                with gr.Row():
+                                    dropdown = gr.Dropdown(dropdown_fn_list, value=r"点击这里输入「关键词」搜索插件", 
+                                                           label="", show_label=False, interactive=True,
+                                                           allow_custom_value=True).style(container=False)
+                                with gr.Row():
+                                    plugin_advanced_arg = gr.Textbox(show_label=True, label="高级参数输入区",
+                                                                     visible=False, elem_id="advance_arg_input_legacy",
+                                                                     placeholder="这里是特殊函数插件的高级参数输入区").style(container=False)
+                                with gr.Row():
+                                    switchy_bt = gr.Button(r"请先从插件列表中选择", variant="secondary",
+                                                           elem_id="elem_switchy_bt").style(size="sm")
                         with gr.Row():
                             with gr.Accordion("点击展开“文件下载区”。", open=False):
                                 file_upload = gr.Files(label="任何文件, 推荐上传压缩文件(zip, tar)",
@@ -461,8 +463,14 @@ def main() -> None:
             
             # 随变按钮的回调函数注册
             def route(request: gr.Request, k, *args, **kwargs):
-                if k in [r"未选定任何插件", r""]: return
-                yield from ArgsGeneralWrapper(plugins[k]["Function"])(request, *args, **kwargs)
+                if k not in [r"点击这里搜索插件列表", r"请先从插件列表中选择", r"未选定任何插件", r""]:
+                    if plugins[k].get("Class", None) is None:
+                        assert plugins[k].get("Function", None) is not None
+                        yield from ArgsGeneralWrapper(plugins[k]["Function"])(request, *args, **kwargs)
+                    else:
+                        # 对于有Class的高级插件，需要通过专门的路由处理
+                        # 这里暂时不做处理，因为高级插件应该通过route_switchy_bt_with_arg来调用
+                        yield None
                 
             # 旧插件的高级参数区确认按钮（隐藏）
             old_plugin_callback = gr.Button(r"未选定任何插件", variant="secondary", visible=False, elem_id="old_callback_btn_for_plugin_exe")
@@ -476,6 +484,9 @@ def main() -> None:
                     new_plugin_callback, usr_confirmed_arg, *input_combo
                 ], output_combo)
             cancel_handles.append(click_handle_ng)
+
+            # ---- 函数插件-下拉菜单与随变按钮的互动（新版-更流畅）----
+            dropdown.select(None, [dropdown], None, _js=f"""(dropdown)=>run_dropdown_shift(dropdown)""")
 
             # ---- 停止按钮 ----
             stopBtn.click(fn=None, inputs=None, outputs=None, cancels=cancel_handles)
@@ -530,7 +541,7 @@ def main() -> None:
             btn_logout = gr.Button("🚪 登出", variant="secondary")
 
             # ---- 认证状态显示 ----
-            auth_status = gr.Markdown("🔒 未登录", elem_id="auth-status")
+            # auth_status = gr.Markdown("🔒 未登录", elem_id="auth-status")
 
             def update_auth_status(token, username, role):
                 """更新认证状态显示"""
