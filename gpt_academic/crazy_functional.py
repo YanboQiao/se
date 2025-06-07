@@ -51,6 +51,9 @@ def get_crazy_functions():
     from crazy_functions.SourceCode_Comment_Wrap import SourceCodeComment_Wrap
     from crazy_functions.VideoResource_GPT import 多媒体任务
 
+    # 导入软件工程助手的所有功能函数
+    from crazy_functions.软件工程助手 import 需求分析助手, 可行性分析助手, 总体设计助手, 详细设计助手, 单元测试助手, 软件工程流程助手
+
     function_plugins = {
         "多媒体智能体": {
             "Group": "智能体",
@@ -407,13 +410,51 @@ def get_crazy_functions():
         }
     )
 
-
-
-
-
-
-
-
+    # 软件工程课程助手功能
+    function_plugins.update({
+        "💼软件工程需求分析助手": {
+            "Group": "软件工程",
+            "Color": "stop",
+            "AsButton": True,
+            "Info": "帮助分析软件需求，生成需求规格说明书 | 输入项目描述或需求文档",
+            "Function": HotReload(需求分析助手)
+        },
+        "📊软件工程可行性分析助手": {
+            "Group": "软件工程", 
+            "Color": "stop",
+            "AsButton": True,
+            "Info": "从技术、经济、操作等角度分析项目可行性 | 输入项目描述",
+            "Function": HotReload(可行性分析助手)
+        },
+        "🏗️软件工程总体设计助手": {
+            "Group": "软件工程",
+            "Color": "stop", 
+            "AsButton": True,
+            "Info": "基于需求分析结果进行系统总体设计 | 输入需求分析结果",
+            "Function": HotReload(总体设计助手)
+        },
+        "🔧软件工程详细设计助手": {
+            "Group": "软件工程",
+            "Color": "stop",
+            "AsButton": True,
+            "Info": "基于总体设计进行详细的模块设计 | 输入总体设计文档",
+            "Function": HotReload(详细设计助手)
+        },
+        "🧪软件工程单元测试助手": {
+            "Group": "软件工程",
+            "Color": "stop",
+            "AsButton": True,
+            "Info": "基于代码或设计文档生成单元测试用例 | 输入代码或设计文档",
+            "Function": HotReload(单元测试助手)
+        },
+        "📋软件工程流程指导助手": {
+            "Group": "软件工程",
+            "Color": "stop",
+            "AsButton": True,
+            "Info": "提供完整的软件工程流程指导 | 输入项目信息",
+            "Function": HotReload(软件工程流程助手)
+        }
+    })
 
     # -=--=- 尚未充分测试的实验性插件 & 需要额外依赖的插件 -=--=-
     try:
