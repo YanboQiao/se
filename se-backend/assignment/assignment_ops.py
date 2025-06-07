@@ -5,7 +5,7 @@ from flask import jsonify, g, request, current_app
 from .grading_script import process_grading_task
 from login.auth import student_required, teacher_required
 from login.db import get_db_connection
-from .utils import ensure_dir, get_course_str_id, parse_course_id, normalize_course_id
+from .utils import ensure_dir, get_course_str_id, parse_course_id, normalize_course_id, sanitize_email_for_filename
 import json
 
 
@@ -647,4 +647,181 @@ def auto_grade_assignment_api():
         process_grading_task(homework_dir)
 
     return jsonify({"graded": graded, "skipped": skipped}), 200
+
+
+@student_required
+def get_student_assignment_detail_api(assignment_id):
+    """学生通过REST风格URL获取作业详情和自己的提交
+    
+    URL格式: /api/student/assignment/{assignment_id}
+    assignment_id格式: {course_id}_hw_{assign_no}，例如: rg_01_hw_1
+    """
+    student_email = g.user["email"]
+    
+    # 解析 assignment_id
+    try:
+        parts = assignment_id.split('_hw_')
+        if len(parts) != 2:
+            return jsonify({"message": "作业ID格式无效"}), 400
+        course_id = parts[0]
+        assign_no = int(parts[1])
+    except (ValueError, IndexError):
+        return jsonify({"message": "作业ID格式无效"}), 400
+    
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 验证学生参与课程
+            cur.execute("""
+                        SELECT 1
+                        FROM student_course
+                        WHERE useremail = %s
+                          AND course_id = %s
+                        """, (student_email, course_id))
+            if not cur.fetchone():
+                return jsonify({"message": "无权访问该作业"}), 403
+
+            # 查询作业基本信息
+            cur.execute("SELECT title, description, due_date FROM assignment WHERE course_id=%s AND assign_no=%s",
+                        (course_id, assign_no))
+            meta = cur.fetchone()
+            if not meta:
+                return jsonify({"message": "作业不存在"}), 404
+            
+            assignment_info = {
+                "title": meta["title"],
+                "description": meta["description"] or "",
+                "dueDate": meta["due_date"].strftime("%Y-%m-%d") if meta["due_date"] else None
+            }
+            
+            # 检查文件系统中的提交状态
+            base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "courses", "data")
+            homework_dir = os.path.join(base_dir, course_id, "homework", str(assign_no))
+            filename = sanitize_email_for_filename(student_email) + '.txt'
+            file_path = os.path.join(homework_dir, filename)
+            
+            submission_info = None
+            if os.path.exists(file_path):
+                # 读取提交内容
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                except Exception:
+                    content = "无法读取提交内容"
+                
+                # 获取文件修改时间作为提交时间
+                import time
+                submit_time = time.ctime(os.path.getmtime(file_path))
+                
+                # 查询批改信息
+                cur.execute(
+                    "SELECT score, comment FROM homework WHERE course_id=%s AND assign_no=%s AND student_email=%s",
+                    (course_id, assign_no, student_email))
+                grade_info = cur.fetchone()
+                
+                submission_info = {
+                    "content": content,
+                    "submitTime": submit_time,
+                    "score": grade_info["score"] if grade_info else None,
+                    "feedback": grade_info["comment"] if grade_info else ""
+                }
+            
+            return jsonify({
+                "assignment": assignment_info, 
+                "submission": submission_info
+            }), 200
+    finally:
+        conn.close()
+
+
+@student_required
+def submit_assignment_rest_api(assignment_id):
+    """学生通过REST风格URL提交作业
+    
+    URL格式: /api/student/assignment/{assignment_id}/submit
+    assignment_id格式: {course_id}_hw_{assign_no}，例如: rg_01_hw_1
+    
+    请求体格式:
+    {
+        "content": "作业内容"
+    }
+    """
+    student_email = g.user["email"]
+    data = request.get_json(silent=True) or {}
+    
+    # 解析 assignment_id
+    try:
+        parts = assignment_id.split('_hw_')
+        if len(parts) != 2:
+            return jsonify({"message": "作业ID格式无效"}), 400
+        course_id = parts[0]
+        assign_no = int(parts[1])
+    except (ValueError, IndexError):
+        return jsonify({"message": "作业ID格式无效"}), 400
+    
+    content = data.get("content")
+    if content is None:
+        return jsonify({"message": "缺少作业内容"}), 400
+    
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 验证学生参与课程
+            cur.execute("""
+                        SELECT 1
+                        FROM student_course
+                        WHERE useremail = %s
+                          AND course_id = %s
+                        """, (student_email, course_id))
+            if not cur.fetchone():
+                return jsonify({"message": "无权提交此作业"}), 403
+
+            # 检查是否已经提交过（通过文件系统检查）
+            base_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "courses", "data")
+            homework_dir = os.path.join(base_dir, course_id, "homework", str(assign_no))
+            ensure_dir(homework_dir)
+            
+            # 构建学生作业文件名
+            filename = sanitize_email_for_filename(student_email) + '.txt'
+            file_path = os.path.join(homework_dir, filename)
+            
+            # 检查是否已经提交过
+            if os.path.exists(file_path):
+                return jsonify({"message": "请勿重复提交"}), 400
+            
+            # 保存作业内容到文件系统
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            except Exception as e:
+                return jsonify({"message": f"保存作业失败: {e}"}), 500
+            
+            # 如果提交附件，已通过 /uploadfile 接口上传文件，文件标识在 content
+            if isinstance(content, str) and content.startswith("f_"):
+                file_id = content
+                upload_dir = os.path.join(base_dir, "uploads")
+                found_file = next((name for name in os.listdir(upload_dir) if name.startswith(file_id)), None)
+                if found_file:
+                    file_ext = found_file.split('.', 1)[1] if '.' in found_file else ""
+                    dest_name = sanitize_email_for_filename(student_email) + ('.' + file_ext if file_ext else '')
+                    try:
+                        import shutil
+                        shutil.copy(os.path.join(upload_dir, found_file), os.path.join(homework_dir, dest_name))
+                    except Exception as e:
+                        current_app.logger.error(f"Failed to copy file to assignment folder: {e}")
+            
+            now = datetime.datetime.now()
+        conn.commit()  # 虽然没有数据库操作，但保持事务一致性
+        submission_info = {
+            "content": content,
+            "submitTime": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "score": None,
+            "feedback": ""
+        }
+        return jsonify({"submission": submission_info}), 200
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"message": f"提交失败: {e}"}), 500
+    finally:
+        conn.close()
 

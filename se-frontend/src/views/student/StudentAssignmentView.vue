@@ -68,7 +68,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
-import axios from 'axios';
+import http from '@/utils/http';
 import { useUserStore } from '@/stores/user';
 
 /* ---------- 路由参数与状态 ---------- */
@@ -89,7 +89,7 @@ const submitError      = ref('');
 /* ---------- 加载作业详情及我的提交 ---------- */
 async function fetchAssignmentData() {
     try {
-        const { data } = await axios.get(`/api/student/assignment/${assignmentId}`);
+        const { data } = await http.get(`/student/assignment/${assignmentId}`);
         assignmentTitle.value = data.assignment?.title || `作业 ${assignmentId}`;
         assignmentDesc.value  = data.assignment?.description || '';
         assignmentDue.value   = data.assignment?.dueDate || '';
@@ -129,7 +129,7 @@ async function submitAssignment() {
             formData.append('uploaderId', store.useremail || '');
             formData.append('userGroup', '1');
             formData.append('uploadTime', Date.now().toString());
-            const res = await axios.post('/api/v1/uploadfile', formData);
+            const res = await http.post('/v1/uploadfile', formData);
             const fileId = res.data?.data?.fileId;
             contentData = fileId ? fileId : selectedFile.value.name;
         } else {
@@ -137,7 +137,7 @@ async function submitAssignment() {
         }
         // 提交作业记录
         const payload = { content: contentData };
-        const { data } = await axios.post(`/api/student/assignment/${assignmentId}/submit`, payload);
+        const { data } = await http.post(`/student/assignment/${assignmentId}/submit`, payload);
         // 将提交结果保存并更新界面
         mySubmission.value = data.submission || {
             content: contentData,

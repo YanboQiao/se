@@ -4,7 +4,7 @@ from flask import jsonify, g, request
 
 from login.auth import student_required, teacher_required
 from login.db import get_db_connection
-from .utils import ensure_dir, get_course_str_id, parse_course_id
+from .utils import ensure_dir, get_course_str_id, parse_course_id, check_submission_exists, get_assignment_description
 
 
 @student_required
@@ -55,32 +55,44 @@ def get_student_course_api(course_id):
                 "teacher":     meta.get("teacher_name") or "",
             }
 
-            # 作业列表（保持原逻辑）
+            # 作业列表（使用文件系统检查提交状态）
             cur.execute(
-                "SELECT assign_no, title, due_date FROM assignment WHERE course_id=%s",
+                "SELECT assign_no, title, due_date FROM assignment WHERE course_id=%s ORDER BY assign_no",
                 (course_id,),
             )
             for asm in cur.fetchall():
                 no, title, due_date = asm["assign_no"], asm["title"], asm["due_date"]
                 assignment_id = f"{course_id}_hw_{no}"
-                assignment_table = f"{course_id}_hw_{no}"
-
-                try:
-                    cur.execute(
-                        f"SELECT score FROM `{assignment_table}` WHERE studentemail=%s",
-                        (student_email,),
-                    )
-                    sub = cur.fetchone()
-                except Exception:
-                    sub = None
+                
+                # 从文件系统检查提交状态
+                submitted = check_submission_exists(course_id, no, student_email)
+                
+                # 从文件系统获取作业描述
+                description = get_assignment_description(course_id, no)
+                
+                # 如果已提交，从homework表获取评分
+                score = None
+                if submitted:
+                    try:
+                        cur.execute(
+                            "SELECT score FROM homework WHERE course_id=%s AND assign_no=%s AND student_email=%s",
+                            (course_id, no, student_email),
+                        )
+                        score_result = cur.fetchone()
+                        if score_result:
+                            score = score_result["score"]
+                    except Exception:
+                        # 如果查询失败，score保持为None
+                        pass
 
                 data_out["assignments"].append(
                     {
-                        "id":        assignment_id,
-                        "title":     title,
-                        "dueDate":   due_date.strftime("%Y-%m-%d") if due_date else None,
-                        "submitted": bool(sub),
-                        "score":     sub["score"] if sub and sub["score"] is not None else None,
+                        "id":          assignment_id,
+                        "title":       title,
+                        "description": description,
+                        "dueDate":     due_date.strftime("%Y-%m-%d") if due_date else None,
+                        "submitted":   submitted,
+                        "score":       score,
                     }
                 )
     finally:

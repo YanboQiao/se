@@ -13,12 +13,16 @@ const http = axios.create({
     timeout: 10000,
 });
 
-/* 在每次请求头自动带上 token */
+/* 在每次请求头自动带上 token 和用户邮箱 */
 http.interceptors.request.use((config) => {
     const store = useUserStore();
     if (store.token) {
         config.headers = config.headers || {} as AxiosRequestHeaders;
         config.headers.Authorization = `Bearer ${store.token}`;
+    }
+    if (store.useremail) {
+        config.headers = config.headers || {} as AxiosRequestHeaders;
+        config.headers['X-User-Email'] = store.useremail;
     }
     return config;
 });

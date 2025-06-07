@@ -31,7 +31,7 @@
         <!-- 操作按钮 -->
         <div class="mt-4 flex gap-3">
             <router-link
-                :to="`/course/${course.id}`"
+                :to="`/student/course/${course.id}`"
                 class="bg-indigo-600/90 hover:bg-indigo-700 text-white rounded-lg px-4 py-1 text-xs shadow-card"
             >
                 进入课程
