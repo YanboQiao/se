@@ -140,7 +140,7 @@ AUTO_OPEN_BROWSER = True
 MAX_RETRY = 2
 
 # 插件分类默认选项
-DEFAULT_FN_GROUPS = ['对话', '编程', '学术', '智能体']
+DEFAULT_FN_GROUPS = ['对话', '编程', '学术', '智能体', '软件工程']
 
 # 定义界面上“询问多个GPT模型”插件应该使用哪些模型，请从AVAIL_LLM_MODELS中选择，并在不同模型之间用`&`间隔，例如"gpt-3.5-turbo&chatglm3&azure-gpt-4"
 MULTI_QUERY_LLM_MODELS = "claude-3-7-sonnet-20250219&o4-mini"
@@ -294,7 +294,7 @@ WHEN_TO_USE_PROXY = ["Connect_OpenAI", "Download_LLM", "Download_Gradio_Theme", 
                      "Warmup_Modules", "Nougat_Download", "AutoGen", "Connect_OpenAI_Embedding"]
 
 # 启用插件热加载
-PLUGIN_HOT_RELOAD = False
+PLUGIN_HOT_RELOAD = True
 
 # 自定义按钮的最大数量限制
 NUM_CUSTOM_BASIC_BTN = 4

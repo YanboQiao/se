@@ -738,6 +738,8 @@ def get_crazy_functions():
         logger.error("Load function plugin failed")
 
 
+
+
     # try:
     #     from crazy_functions.高级功能函数模板 import 测试图表渲染
     #     function_plugins.update({
