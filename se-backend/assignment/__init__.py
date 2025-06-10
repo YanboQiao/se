@@ -18,7 +18,7 @@ from .assignment_ops import (
     teacher_assignment_summary_api, auto_grade_assignment_api
 )
 from .file_ops import upload_file_api, get_file_api
-from .student_management import get_course_students_api
+from .student_management import get_course_students_api, search_students_api, batch_enroll_students_api
 
 # 导出所有API函数，保持与原来相同的接口
 __all__ = [
@@ -49,7 +49,9 @@ __all__ = [
     'get_file_api',
     
     # 学生管理API
-    'get_course_students_api'
+    'get_course_students_api',
+    'search_students_api',
+    'batch_enroll_students_api',
 ]
 
 # 版本信息

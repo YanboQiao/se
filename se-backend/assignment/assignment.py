@@ -17,7 +17,7 @@ from .assignment_ops import (
     get_student_assignment_detail_api, submit_assignment_rest_api
 )
 from .file_ops import upload_file_api, get_file_api
-from .student_management import get_course_students_api
+from .student_management import get_course_students_api, search_students_api, batch_enroll_students_api
 
 # 为了向后兼容，保留这些函数的引用
 # 这样其他代码仍然可以从 assignment.assignment 导入这些函数
@@ -77,4 +77,12 @@ def init_app(app: Flask):
     # 学生管理API
     app.add_url_rule("/api/teacher/course/<course_id>/students", endpoint="course_students", 
                      view_func=get_course_students_api, methods=["GET"])
+    app.add_url_rule("/api/teacher/search-students", endpoint="search_students", 
+                     view_func=search_students_api, methods=["GET"])
+    app.add_url_rule("/api/teacher/batch-enroll", endpoint="batch_enroll_students", 
+                     view_func=batch_enroll_students_api, methods=["POST"])
+    
+    # 创建课程API (修复路径)
+    app.add_url_rule("/api/teacher/course/create", endpoint="create_course_new", 
+                     view_func=create_course_api, methods=["POST"])
 
